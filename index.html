@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Bengaluru Wards Comparison Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    #map-container {
+      display: grid;
+      width: 100vw;
+      height: calc(100vh - 70px);
+      min-height: 0;
+      overflow: hidden;
+      grid-gap: 2px;
+      background: #111;
+      /* Default: 2 maps side by side */
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr;
+    }
+    .map-section {
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+      border: none;
+      border-radius: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      background: #f8f8f8;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+    }
+    .map {
+      flex: 1 1 auto;
+      min-height: 0;
+      min-width: 0;
+      border-radius: 0;
+      overflow: hidden;
+    }
+    .split-btn {
+      background: #1976d2;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 0.95em;
+    }
+    @media (max-width: 900px) {
+      #map-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 1fr 1fr 1fr;
+        height: calc(100vh - 70px);
+      }
+      .map-section {
+        min-width: 0;
+        min-height: 0;
+      }
+    }
+
+  </style>
+</head>
+<body>
+  <div style="display: flex; align-items: center; justify-content: center; margin-top: 16px; margin-bottom: 8px;">
+    <h2 style="margin: 0 12px 0 0;">Bengaluru Wards & Zones Comparison Map</h2>
+    <div style="display: flex; gap: 6px;">
+      <button id="btn-1x2" class="split-btn" title="1x2 Grid" style="padding: 2px 6px; display: flex; align-items: center;">
+        <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/><rect x="16" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/></svg>
+      </button>
+      <button id="btn-2x2" class="split-btn" title="2x2 Grid" style="padding: 2px 6px; display: flex; align-items: center;">
+        <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/><rect x="16" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/><rect x="2" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/><rect x="16" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="map-container"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://jieter.github.io/Leaflet.Sync/L.Map.Sync.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+  <script>
+    // Placeholder GeoJSON URLs (replace with your actual files)
+    const LAYER_OPTIONS = [
+      { label: 'New GBA Wards', url: 'geojson/gba_wards.geojson', color: 'green' },
+      { label: 'BBMP Wards', url: 'geojson/bbmp_wards.geojson', color: 'blue' },
+      { label: 'Villages', url: 'geojson/villages.geojson', color: 'orange' },
+      { label: 'Settlements', url: 'geojson/bbmp_settlements.geojson', color: 'purple' },
+  { label: 'GBA Zones', url: 'geojson/zones.geojson', color: 'red' }
+    ];
+
+    // Map state
+  let mapSections = [];
+  const maxSections = 4;
+
+    // Initial center (Bengaluru)
+    const initialCenter = [12.9716, 77.5946];
+    const initialZoom = 11;
+
+    function createMapSection(idx) {
+      const section = document.createElement('div');
+      section.className = 'map-section';
+      section.id = `map-section-${idx}`;
+
+      // Map div
+      const mapDiv = document.createElement('div');
+      mapDiv.className = 'map';
+      mapDiv.id = `map${idx}`;
+      section.appendChild(mapDiv);
+
+      return section;
+    }
+
+    // Dynamically update grid layout based on map count
+    function updateGridLayout() {
+      const container = document.getElementById('map-container');
+      const count = mapSections.length;
+      if (count === 2) {
+        container.style.gridTemplateColumns = '1fr 1fr';
+        container.style.gridTemplateRows = '1fr';
+      } else if (count === 3) {
+        container.style.gridTemplateColumns = '1fr 1fr';
+        container.style.gridTemplateRows = '1fr 1fr';
+      } else if (count === 4) {
+        container.style.gridTemplateColumns = '1fr 1fr';
+        container.style.gridTemplateRows = '1fr 1fr';
+      }
+    }
+
+    function addMapSection() {
+      if (mapSections.length >= maxSections) return;
+      const idx = mapSections.length;
+      const section = createMapSection(idx);
+      document.getElementById('map-container').appendChild(section);
+      updateGridLayout();
+      // Create Leaflet map
+      const map = L.map(`map${idx}`, {
+        center: initialCenter,
+        zoom: initialZoom,
+        zoomControl: idx === 0, // Only first map has zoom control
+        scrollWheelZoom: true
+      });
+      // OSM base
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19
+      }).addTo(map);
+      // Layer
+      let geoLayer = null;
+      function loadLayer(layerIdx) {
+        if (geoLayer) map.removeLayer(geoLayer);
+        const opt = LAYER_OPTIONS[layerIdx];
+        
+        console.log(`Loading layer: ${opt.label} (${opt.url})`);
+        updateDebugStatus(`Loading ${opt.label}...`);
+        
+        // Find this map in the mapSections array
+        const thisMapIndex = mapSections.findIndex(ms => ms.map === map);
+        if (thisMapIndex >= 0) {
+          mapSections[thisMapIndex].loadedLayer = layerIdx;
+        }
+        
+        // Create a test popup to verify if GeoJSON files exist
+        const testPopup = L.popup()
+            .setLatLng(initialCenter)
+            .setContent(`<div style="text-align:center">Testing ${opt.label}...</div>`)
+            .openOn(map);
+        
+        fetch(opt.url)
+          .then(r => {
+            if (!r.ok) {
+              throw new Error(`HTTP error! status: ${r.status}`);
+            }
+            return r.json();
+          })
+          .then(data => {
+            map.closePopup(); // Close test popup
+            
+            if (!data || !data.features || data.features.length === 0) {
+              console.warn(`No features found in ${opt.url}`);
+              updateDebugStatus(`Warning: No features in ${opt.label}`);
+              
+              // Show a warning popup
+              L.popup()
+                .setLatLng(initialCenter)
+                .setContent(`<div style="color:orange">⚠️ No features found in ${opt.label}</div>`)
+                .openOn(map);
+            } else {
+              console.log(`Loaded ${data.features.length} features from ${opt.url}`);
+              updateDebugStatus(`Loaded ${opt.label}: ${data.features.length} features`);
+            }
+            
+            geoLayer = L.geoJSON(data, {
+              style: { color: opt.color, weight: 2, fillOpacity: 0.1 },
+              onEachFeature: (feature, layer) => {
+                // Create popup content
+                const title = opt.label;
+                let props = Object.entries(feature.properties).map(([k,v]) => `<b>${k}</b>: ${v}`).join('<br>');
+                const content = `<h4 style="margin:0 0 5px 0;font-size:14px;color:${opt.color}">${title}</h4>${props}`;
+                
+                // Bind popup to this layer
+                layer.bindPopup(content);
+                
+                // Add click handler to propagate clicks to other maps
+                layer.on('click', function(e) {
+                  // Prevent the click from triggering map's click event (to avoid double popups)
+                  L.DomEvent.stopPropagation(e);
+                  
+                  // Get the click coordinates
+                  const latlng = e.latlng;
+                  
+                  console.log(`Feature clicked at ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`);
+                  updateDebugStatus(`Clicked: ${feature.properties.ward_name || feature.properties.id || 'feature'}`);
+                  
+                  // Trigger click events on all other maps at this location
+                  mapSections.forEach((ms) => {
+                    if (ms.map !== map) {
+                      // Simulate a click at the same coordinates
+                      ms.map.fire('external-feature-click', {
+                        latlng: latlng
+                      });
+                    }
+                  });
+                });
+              }
+            }).addTo(map);
+            
+            // IMPORTANT: Update the geoLayer reference in mapSections array
+            if (thisMapIndex >= 0) {
+              mapSections[thisMapIndex].geoLayer = geoLayer;
+              console.log(`Updated geoLayer reference for map ${thisMapIndex}`);
+            }
+          })
+          .catch(error => {
+            map.closePopup(); // Close test popup
+            console.error(`Error loading GeoJSON from ${opt.url}:`, error);
+            updateDebugStatus(`Error loading ${opt.label}`);
+            
+            // Show error popup
+            L.popup()
+              .setLatLng(initialCenter)
+              .setContent(`<div style="color:red">❌ Error loading ${opt.label}:<br>${error.message}</div>`)
+              .openOn(map);
+          });
+      }
+      // Initial layer
+      loadLayer(0);
+
+      // Add dropdown as a Leaflet control (topright)
+      const LayerDropdown = L.Control.extend({
+        options: { position: 'topright' },
+        onAdd: function() {
+          const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+          const select = L.DomUtil.create('select', '', container);
+          select.style.margin = '4px';
+          select.style.padding = '2px 6px';
+          select.style.fontSize = '1em';
+          select.id = `layer-select-${idx}`;
+          LAYER_OPTIONS.forEach((opt, i) => {
+            const option = document.createElement('option');
+            option.value = i;
+            option.textContent = opt.label;
+            select.appendChild(option);
+          });
+          L.DomEvent.disableClickPropagation(container);
+          L.DomEvent.on(select, 'change', function(e) {
+            const layerIdx = parseInt(e.target.value);
+            console.log(`Map ${idx} changing to layer: ${LAYER_OPTIONS[layerIdx].label}`);
+            loadLayer(layerIdx);
+          });
+          return container;
+        }
+      });
+      map.addControl(new LayerDropdown());
+      // Store map with additional properties
+      mapSections.push({ 
+        map,  
+        geoLayer,  // This will be updated in loadLayer
+        index: idx,
+        loadedLayer: 0  // Track which layer is loaded
+      });
+      
+      // Sync all maps with each other
+      if (mapSections.length > 1) {
+        for (let i = 0; i < mapSections.length; i++) {
+          for (let j = 0; j < mapSections.length; j++) {
+            if (i !== j) {
+              mapSections[i].map.sync(mapSections[j].map, { 
+                syncCursor: true,
+                syncCursorMarkerOptions: {
+                  radius: 2,
+                  fillOpacity: 0,
+                  color: '#ff0000', // Red cursor marker
+                  fillColor: '#ff0000'
+                }
+              });
+            }
+          }
+        }
+      }
+      
+      // Find features at a point for a specific map
+      function findFeaturesAtPoint(mapObj, latlng) {
+        if (!mapObj.geoLayer) return [];
+        
+        const results = [];
+        const point = turf.point([latlng.lng, latlng.lat]);
+        
+        mapObj.geoLayer.eachLayer(function(layer) {
+          if (!layer.feature) return;
+          
+          try {
+            // Get the feature's geometry type
+            const geomType = layer.feature.geometry.type;
+            
+            // Handle different geometry types
+            if (geomType === 'Polygon') {
+              if (turf.booleanPointInPolygon(point, layer.feature)) {
+                results.push(layer);
+              }
+            } 
+            else if (geomType === 'MultiPolygon') {
+              if (turf.booleanPointInPolygon(point, layer.feature)) {
+                results.push(layer);
+              }
+            }
+            else if (geomType === 'Point') {
+              // For point features, use a small buffer
+              const buffer = turf.buffer(point, 0.02, {units: 'kilometers'});
+              const featurePoint = turf.point(layer.feature.geometry.coordinates);
+              if (turf.booleanPointInPolygon(featurePoint, buffer)) {
+                results.push(layer);
+              }
+            }
+            else if (geomType === 'LineString') {
+              // For lines, use a small buffer around the point
+              const buffer = turf.buffer(point, 0.02, {units: 'kilometers'});
+              const line = turf.lineString(layer.feature.geometry.coordinates);
+              if (turf.booleanIntersects(line, buffer)) {
+                results.push(layer);
+              }
+            }
+            else if (geomType === 'MultiLineString') {
+              const buffer = turf.buffer(point, 0.02, {units: 'kilometers'});
+              const multiLine = turf.multiLineString(layer.feature.geometry.coordinates);
+              if (turf.booleanIntersects(multiLine, buffer)) {
+                results.push(layer);
+              }
+            }
+          } catch (e) {
+            console.log("Error finding feature at point:", e);
+          }
+        });
+        
+        return results;
+      }
+      
+      // Add a status indicator to help debug the map
+      const debugControl = L.Control.extend({
+        options: { position: 'bottomleft' },
+        onAdd: function() {
+          const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+          container.style.background = 'white';
+          container.style.padding = '3px 6px';
+          container.style.fontSize = '12px';
+          container.id = `debug-status-${idx}`;
+          container.innerHTML = `Map ${idx}: No layer loaded`;
+          return container;
+        }
+      });
+      map.addControl(new debugControl());
+      
+      // Update debug status with layer info
+      function updateDebugStatus(status) {
+        const debugEl = document.getElementById(`debug-status-${idx}`);
+        if (debugEl) debugEl.innerHTML = `Map ${idx}: ${status}`;
+      }
+      
+      // Handle regular map clicks for this map's own layers
+      map.on('click', function(e) {
+        const clickLatLng = e.latlng;
+        
+        // Log click for debugging
+        console.log(`Click on Map ${idx} at ${clickLatLng.lat.toFixed(5)}, ${clickLatLng.lng.toFixed(5)}`);
+        updateDebugStatus(`Clicked at ${clickLatLng.lat.toFixed(5)}, ${clickLatLng.lng.toFixed(5)}`);
+        
+        // When clicking on the map (not on a feature), we need to:
+        // 1. Check if there's a feature at this point
+        // 2. If not, just pass the click to other maps
+        
+        // We'll do a "leaflet-locate-features-at-point" internally
+        let featuresFound = false;
+        
+        if (geoLayer) {
+          // Try to find if we clicked on a feature
+          geoLayer.eachLayer(function(layer) {
+            if (layer.feature && layer._bounds) {
+              // For polygons/multipolygons, use turf.js to check if point is inside
+              try {
+                const point = turf.point([clickLatLng.lng, clickLatLng.lat]);
+                if (turf.booleanPointInPolygon(point, layer.feature)) {
+                  featuresFound = true;
+                }
+              } catch(err) {
+                console.log("Error checking point in polygon:", err);
+              }
+            }
+          });
+        }
+        
+        // If no features found at click point, just pass the click to other maps
+        if (!featuresFound) {
+          // Propagate click to other maps
+          mapSections.forEach(ms => {
+            if (ms.map !== map) {
+              ms.map.fire('external-map-click', { 
+                latlng: clickLatLng,
+                findFeatures: true
+              });
+            }
+          });
+        }
+      });
+      
+      // Handle clicks from other maps
+      map.on('external-map-click', function(e) {
+        const latlng = e.latlng;
+        const findFeatures = e.findFeatures;
+        
+        // Log external click for debugging
+        console.log(`External click received on Map ${idx} at ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`);
+        updateDebugStatus(`External click received`);
+        
+        if (findFeatures && geoLayer) {
+          // Try to find features at this point in this map
+          let foundFeature = false;
+          
+          geoLayer.eachLayer(function(layer) {
+            if (layer.feature) {
+              try {
+                const point = turf.point([latlng.lng, latlng.lat]);
+                if (turf.booleanPointInPolygon(point, layer.feature)) {
+                  // We found a feature at this point, open its popup
+                  foundFeature = true;
+                  layer.openPopup(latlng);
+                }
+              } catch(err) {
+                console.log("Error checking point in polygon:", err);
+              }
+            }
+          });
+          
+          if (foundFeature) {
+            console.log(`Found features at click point in Map ${idx}`);
+          } else {
+            console.log(`No features found at click point in Map ${idx}`);
+          }
+        }
+      });
+      
+      // Handle external feature clicks (from features in other maps)
+      map.on('external-feature-click', function(e) {
+        const latlng = e.latlng;
+        
+        console.log(`External feature click received on Map ${idx} at ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`);
+        updateDebugStatus(`External feature click received`);
+        
+        if (geoLayer) {
+          // Try to find features at this point in this map
+          geoLayer.eachLayer(function(layer) {
+            if (layer.feature) {
+              try {
+                const point = turf.point([latlng.lng, latlng.lat]);
+                if (turf.booleanPointInPolygon(point, layer.feature)) {
+                  // If we find a feature at this point, open its popup
+                  layer.openPopup(latlng);
+                }
+              } catch(err) {
+                console.log("Error checking point in polygon:", err);
+              }
+            }
+          });
+        }
+      });
+      
+      // Cursor sync (crosshair)
+      map.on('mousemove', function(e) {
+        mapSections.forEach((ms, i) => {
+          if (ms.map !== map) {
+            ms.map.fire('external-cursor-move', { latlng: e.latlng });
+          }
+        });
+      });
+      // Draw crosshair on cursor sync
+      let crosshair = null;
+      map.on('external-cursor-move', function(e) {
+        if (crosshair) map.removeLayer(crosshair);
+        crosshair = L.circleMarker(e.latlng, {
+          radius: 8,
+          color: '#ff0000',
+          weight: 2,
+          fillOpacity: 0.2
+        }).addTo(map);
+        setTimeout(() => { if (crosshair) map.removeLayer(crosshair); }, 500);
+      });
+    }
+
+    // Helper to clear all map sections
+    function clearAllMapSections() {
+      while (mapSections.length > 0) {
+        const idx = mapSections.length - 1;
+        const section = document.getElementById(`map-section-${idx}`);
+        if (section) section.remove();
+        const ms = mapSections.pop();
+        if (ms && ms.map) ms.map.remove();
+      }
+    }
+
+    // Helper to force all maps to resize and recenter
+    function forceAllMapsResize() {
+      setTimeout(() => {
+        mapSections.forEach(ms => {
+          ms.map.invalidateSize();
+          ms.map.setView(ms.map.getCenter(), ms.map.getZoom(), { animate: false });
+        });
+      }, 100);
+    }
+
+    // Set to 1x2 grid (2 maps)
+    function set1x2Grid() {
+      clearAllMapSections();
+      addMapSection();
+      addMapSection();
+      forceAllMapsResize();
+    }
+
+    // Set to 2x2 grid (4 maps)
+    function set2x2Grid() {
+      clearAllMapSections();
+      addMapSection();
+      addMapSection();
+      addMapSection();
+      addMapSection();
+      forceAllMapsResize();
+    }
+
+    // Initial grid: 1x2
+    set1x2Grid();
+
+    // Grid layout buttons
+    document.getElementById('btn-1x2').onclick = set1x2Grid;
+    document.getElementById('btn-2x2').onclick = set2x2Grid;
+  </script>
+</body>
+</html>
