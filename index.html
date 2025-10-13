@@ -300,7 +300,116 @@
         opacity: 0.85
       }).addTo(map);
 
-      // Layer
+
+      // --- Multi-layer logic for map 0 ---
+      // Add multi-select dropdown as a Leaflet control for map 0
+      if (idx === 0) {
+        const MultiLayerDropdown = L.Control.extend({
+          options: { position: 'topright' },
+          onAdd: function() {
+            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+            container.style.background = '#fff';
+            container.style.padding = '4px 8px';
+            container.style.margin = '6px 0 0 0';
+            container.style.borderRadius = '6px';
+            container.style.boxShadow = '0 2px 8px rgba(0,0,0,0.07)';
+            container.style.display = 'flex';
+            container.style.alignItems = 'center';
+            const label = document.createElement('label');
+            label.textContent = 'Layers: ';
+            label.style.fontWeight = 'bold';
+            label.style.fontSize = '0.98em';
+            label.style.marginRight = '6px';
+            container.appendChild(label);
+            const select = document.createElement('select');
+            select.id = 'multi-layer-select';
+            select.multiple = true;
+            select.size = Math.min(LAYER_OPTIONS.length, 5);
+            select.style.minWidth = '140px';
+            select.style.fontSize = '1em';
+            select.style.padding = '2px 6px';
+            select.style.border = '1.5px solid #bbb';
+            select.style.borderRadius = '4px';
+            select.style.background = '#fff';
+            select.style.marginBottom = '0';
+            LAYER_OPTIONS.forEach((opt, i) => {
+              const option = document.createElement('option');
+              option.value = i;
+              option.textContent = opt.label;
+              select.appendChild(option);
+            });
+            container.appendChild(select);
+            L.DomEvent.disableClickPropagation(container);
+            return container;
+          }
+        });
+        map.addControl(new MultiLayerDropdown());
+      }
+      let geoLayers = [];
+      // For map 0, support multiple layers
+      function loadLayersMulti(selectedLayerIdxs) {
+        // Remove all previous layers
+        geoLayers.forEach(l => map.removeLayer(l));
+        geoLayers = [];
+        if (!selectedLayerIdxs || selectedLayerIdxs.length === 0) {
+          updateDebugStatus('No layer loaded. Please select one or more layers.');
+          return;
+        }
+        let loadedCount = 0;
+        selectedLayerIdxs.forEach(layerIdx => {
+          const opt = LAYER_OPTIONS[layerIdx];
+          updateDebugStatus(`Loading ${opt.label}...`);
+          fetch(opt.url)
+            .then(r => {
+              if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+              return r.json();
+            })
+            .then(data => {
+              if (!data || !data.features || data.features.length === 0) {
+                updateDebugStatus(`Warning: No features in ${opt.label}`);
+                L.popup()
+                  .setLatLng(initialCenter)
+                  .setContent(`<div style="color:orange">⚠️ No features found in ${opt.label}</div>`)
+                  .openOn(map);
+              } else {
+                updateDebugStatus(`Loaded ${opt.label}: ${data.features.length} features`);
+              }
+              const geoLayer = L.geoJSON(data, {
+                style: { color: opt.color, weight: 2, fillOpacity: 0.1 },
+                onEachFeature: (feature, layer) => {
+                  const title = opt.label;
+                  let props = Object.entries(feature.properties).map(([k,v]) => `<b>${k}</b>: ${v}`).join('<br>');
+                  const content = `<h4 style=\"margin:0 0 5px 0;font-size:14px;color:${opt.color}\">${title}</h4>${props}`;
+                  layer.bindPopup(content);
+                  layer.on('click', function(e) {
+                    L.DomEvent.stopPropagation(e);
+                    const latlng = e.latlng;
+                    updateDebugStatus(`Clicked: ${feature.properties.ward_name || feature.properties.id || 'feature'}`);
+                    mapSections.forEach((ms) => {
+                      if (ms.map !== map) {
+                        ms.map.fire('external-feature-click', { latlng });
+                      }
+                    });
+                  });
+                }
+              }).addTo(map);
+              geoLayers.push(geoLayer);
+              loadedCount++;
+              if (loadedCount === selectedLayerIdxs.length) {
+                updateDebugStatus(`Loaded ${loadedCount} layer(s)`);
+              }
+            })
+            .catch(error => {
+              updateDebugStatus(`Error loading ${opt.label}`);
+              L.popup()
+                .setLatLng(initialCenter)
+                .setContent(`<div style=\"color:red\">❌ Error loading ${opt.label}:<br>${error.message}</div>`)
+                .openOn(map);
+            });
+        });
+      }
+
+      // For other maps, keep single-layer logic
       let geoLayer = null;
       function loadLayer(layerIdx) {
         if (geoLayer) map.removeLayer(geoLayer);
@@ -309,125 +418,195 @@
           return;
         }
         const opt = LAYER_OPTIONS[layerIdx];
-        console.log(`Loading layer: ${opt.label} (${opt.url})`);
         updateDebugStatus(`Loading ${opt.label}...`);
-        // Find this map in the mapSections array
-        const thisMapIndex = mapSections.findIndex(ms => ms.map === map);
-        if (thisMapIndex >= 0) {
-          mapSections[thisMapIndex].loadedLayer = layerIdx;
-        }
-        // Create a test popup to verify if GeoJSON files exist
-        const testPopup = L.popup()
-            .setLatLng(initialCenter)
-            .setContent(`<div style="text-align:center">Testing ${opt.label}...</div>`)
-            .openOn(map);
         fetch(opt.url)
           .then(r => {
-            if (!r.ok) {
-              throw new Error(`HTTP error! status: ${r.status}`);
-            }
+            if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
             return r.json();
           })
           .then(data => {
-            map.closePopup(); // Close test popup
             if (!data || !data.features || data.features.length === 0) {
-              console.warn(`No features found in ${opt.url}`);
               updateDebugStatus(`Warning: No features in ${opt.label}`);
-              // Show a warning popup
               L.popup()
                 .setLatLng(initialCenter)
-                .setContent(`<div style="color:orange">⚠️ No features found in ${opt.label}</div>`)
+                .setContent(`<div style=\"color:orange\">⚠️ No features found in ${opt.label}</div>`)
                 .openOn(map);
             } else {
-              console.log(`Loaded ${data.features.length} features from ${opt.url}`);
               updateDebugStatus(`Loaded ${opt.label}: ${data.features.length} features`);
             }
             geoLayer = L.geoJSON(data, {
               style: { color: opt.color, weight: 2, fillOpacity: 0.1 },
               onEachFeature: (feature, layer) => {
-                // Create popup content
                 const title = opt.label;
                 let props = Object.entries(feature.properties).map(([k,v]) => `<b>${k}</b>: ${v}`).join('<br>');
-                const content = `<h4 style="margin:0 0 5px 0;font-size:14px;color:${opt.color}">${title}</h4>${props}`;
-                // Bind popup to this layer
+                const content = `<h4 style=\"margin:0 0 5px 0;font-size:14px;color:${opt.color}\">${title}</h4>${props}`;
                 layer.bindPopup(content);
-                // Add click handler to propagate clicks to other maps
                 layer.on('click', function(e) {
                   L.DomEvent.stopPropagation(e);
                   const latlng = e.latlng;
-                  console.log(`Feature clicked at ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`);
                   updateDebugStatus(`Clicked: ${feature.properties.ward_name || feature.properties.id || 'feature'}`);
                   mapSections.forEach((ms) => {
                     if (ms.map !== map) {
-                      ms.map.fire('external-feature-click', {
-                        latlng: latlng
-                      });
+                      ms.map.fire('external-feature-click', { latlng });
                     }
                   });
                 });
               }
             }).addTo(map);
-            // IMPORTANT: Update the geoLayer reference in mapSections array
-            if (thisMapIndex >= 0) {
-              mapSections[thisMapIndex].geoLayer = geoLayer;
-              console.log(`Updated geoLayer reference for map ${thisMapIndex}`);
-            }
           })
           .catch(error => {
-            map.closePopup(); // Close test popup
-            console.error(`Error loading GeoJSON from ${opt.url}:`, error);
             updateDebugStatus(`Error loading ${opt.label}`);
-            // Show error popup
             L.popup()
               .setLatLng(initialCenter)
-              .setContent(`<div style="color:red">❌ Error loading ${opt.label}:<br>${error.message}</div>`)
+              .setContent(`<div style=\"color:red\">❌ Error loading ${opt.label}:<br>${error.message}</div>`)
               .openOn(map);
           });
       }
+
       // Do not load any layer by default
       updateDebugStatus('No layer loaded. Please select a layer from the dropdown to proceed.');
 
-      // Add dropdown as a Leaflet control (topright)
-      const LayerDropdown = L.Control.extend({
-        options: { position: 'topright' },
-        onAdd: function() {
-          const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-          const select = L.DomUtil.create('select', '', container);
-          select.style.margin = '4px';
-          select.style.padding = '2px 6px';
-          select.style.fontSize = '1em';
-          select.id = `layer-select-${idx}`;
-          // Add 'Select...' option at the top
-          const placeholder = document.createElement('option');
-          placeholder.value = '';
-          placeholder.textContent = 'Select...';
-          placeholder.disabled = true;
-          placeholder.selected = true;
-          select.appendChild(placeholder);
-          LAYER_OPTIONS.forEach((opt, i) => {
-            const option = document.createElement('option');
-            option.value = i;
-            option.textContent = opt.label;
-            select.appendChild(option);
-          });
-          L.DomEvent.disableClickPropagation(container);
-          L.DomEvent.on(select, 'change', function(e) {
-            const layerIdx = parseInt(e.target.value);
-            if (isNaN(layerIdx)) return;
-            console.log(`Map ${idx} changing to layer: ${LAYER_OPTIONS[layerIdx].label}`);
-            loadLayer(layerIdx);
-          });
-          return container;
-        }
-      });
-      map.addControl(new LayerDropdown());
+      // Add dropdown as a Leaflet control (topright) for maps 1+
+      if (idx !== 0) {
+        const LayerDropdown = L.Control.extend({
+          options: { position: 'topright' },
+          onAdd: function() {
+            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+            const select = L.DomUtil.create('select', '', container);
+            select.style.margin = '4px';
+            select.style.padding = '2px 6px';
+            select.style.fontSize = '1em';
+            select.id = `layer-select-${idx}`;
+            // Add 'Select...' option at the top
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Select...';
+            placeholder.disabled = true;
+            placeholder.selected = true;
+            select.appendChild(placeholder);
+            LAYER_OPTIONS.forEach((opt, i) => {
+              const option = document.createElement('option');
+              option.value = i;
+              option.textContent = opt.label;
+              select.appendChild(option);
+            });
+            L.DomEvent.disableClickPropagation(container);
+            L.DomEvent.on(select, 'change', function(e) {
+              const layerIdx = parseInt(e.target.value);
+              if (isNaN(layerIdx)) return;
+              loadLayer(layerIdx);
+            });
+            return container;
+          }
+        });
+        map.addControl(new LayerDropdown());
+      }
+
       // Store map with additional properties
-      mapSections.push({ 
-        map,  
-        geoLayer,  // This will be updated in loadLayer
-        index: idx,
-        loadedLayer: 0  // Track which layer is loaded
+      if (idx === 0) {
+        mapSections.push({ 
+          map,  
+          geoLayers,  // Array of layers for multi
+          index: idx,
+          loadedLayers: []  // Track which layers are loaded
+        });
+      } else {
+        mapSections.push({ 
+          map,  
+          geoLayer,  // Single layer for others
+          index: idx,
+          loadedLayer: 0  // Track which layer is loaded
+        });
+      }
+    // --- Multi-layer select event for map 0 ---
+    document.addEventListener('DOMContentLoaded', function() {
+      const select = document.getElementById('multi-layer-select');
+      if (select) {
+        select.addEventListener('change', function() {
+          const selected = Array.from(select.selectedOptions).map(opt => parseInt(opt.value)).filter(v => !isNaN(v));
+          // Find map 0
+          const ms0 = mapSections[0];
+          if (ms0 && ms0.map && typeof ms0.index === 'number' && ms0.index === 0) {
+            ms0.loadedLayers = selected;
+            // Call the multi-layer loader
+            ms0.geoLayers = ms0.geoLayers || [];
+            // Remove all previous layers
+            ms0.geoLayers.forEach(l => ms0.map.removeLayer(l));
+            ms0.geoLayers = [];
+            if (selected.length > 0) {
+              // Use the function from map 0's scope
+              // We need to call the loadLayersMulti function in map 0's closure
+              // So, we use a hack: call addMapSection again to get a reference, but only if needed
+              // Instead, we can call the function directly if we expose it
+              // For now, use window-scoped function
+              if (typeof window.loadLayersMultiMap0 === 'function') {
+                window.loadLayersMultiMap0(selected);
+              }
+            } else {
+              // No layers selected, clear all
+              ms0.geoLayers = [];
+            }
+          }
+        });
+      }
+    });
+
+    // Expose the multi-layer loader for map 0
+    window.loadLayersMultiMap0 = function(selectedLayerIdxs) {
+      if (!mapSections[0]) return;
+      const ms0 = mapSections[0];
+      if (!ms0.map) return;
+      // Remove all previous layers
+      ms0.geoLayers.forEach(l => ms0.map.removeLayer(l));
+      ms0.geoLayers = [];
+      if (!selectedLayerIdxs || selectedLayerIdxs.length === 0) {
+        const debugEl = document.getElementById('debug-status-0');
+        if (debugEl) debugEl.innerHTML = 'Map 0: No layer loaded. Please select one or more layers.';
+        return;
+      }
+      let loadedCount = 0;
+      selectedLayerIdxs.forEach(layerIdx => {
+        const opt = LAYER_OPTIONS[layerIdx];
+        fetch(opt.url)
+          .then(r => { if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`); return r.json(); })
+          .then(data => {
+            const geoLayer = L.geoJSON(data, {
+              style: { color: opt.color, weight: 2, fillOpacity: 0.1 },
+              onEachFeature: (feature, layer) => {
+                const title = opt.label;
+                let props = Object.entries(feature.properties).map(([k,v]) => `<b>${k}</b>: ${v}`).join('<br>');
+                const content = `<h4 style=\"margin:0 0 5px 0;font-size:14px;color:${opt.color}\">${title}</h4>${props}`;
+                layer.bindPopup(content);
+                layer.on('click', function(e) {
+                  L.DomEvent.stopPropagation(e);
+                  const latlng = e.latlng;
+                  const debugEl = document.getElementById('debug-status-0');
+                  if (debugEl) debugEl.innerHTML = `Map 0: Clicked: ${feature.properties.ward_name || feature.properties.id || 'feature'}`;
+                  mapSections.forEach((ms) => {
+                    if (ms.map !== ms0.map) {
+                      ms.map.fire('external-feature-click', { latlng });
+                    }
+                  });
+                });
+              }
+            }).addTo(ms0.map);
+            ms0.geoLayers.push(geoLayer);
+            loadedCount++;
+            if (loadedCount === selectedLayerIdxs.length) {
+              const debugEl = document.getElementById('debug-status-0');
+              if (debugEl) debugEl.innerHTML = `Map 0: Loaded ${loadedCount} layer(s)`;
+            }
+          })
+          .catch(error => {
+            const debugEl = document.getElementById('debug-status-0');
+            if (debugEl) debugEl.innerHTML = `Map 0: Error loading ${opt.label}`;
+            L.popup()
+              .setLatLng(initialCenter)
+              .setContent(`<div style=\"color:red\">❌ Error loading ${opt.label}:<br>${error.message}</div>`)
+              .openOn(ms0.map);
+          });
       });
+    };
       
       // Sync all maps with each other
       if (mapSections.length > 1) {
