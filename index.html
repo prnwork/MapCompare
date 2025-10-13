@@ -71,9 +71,14 @@
   </style>
 </head>
 <body>
-  <div style="display: flex; align-items: center; justify-content: center; margin-top: 16px; margin-bottom: 8px;">
-    <h2 style="margin: 0 12px 0 0;">Bengaluru Wards & Zones Comparison Map</h2>
-    <div style="display: flex; gap: 6px;">
+  <div style="display: flex; align-items: center; justify-content: center; margin-top: 16px; margin-bottom: 8px; gap: 12px; width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto;">
+  <h2 style="margin: 0 12px 0 0; flex-shrink: 0;">Bengaluru Wards & Zones Comparison Map</h2>
+    <div id="search-bar-container" style="margin-left: auto; position: relative; min-width: 260px; max-width: 420px; width: 100%; display: flex; align-items: center; gap: 6px;">
+      <input id="location-search" type="text" placeholder="Search ward, village, or settlement..." style="flex:1; padding: 7px 10px; font-size: 1em; border: 1.5px solid #bbb; border-radius: 4px; outline: none;" autocomplete="off">
+      <div id="autocomplete-list" style="position: absolute; left: 0; top: 100%; z-index: 1000; background: #fff; border: 1px solid #ccc; border-radius: 0 0 4px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); width: 100%; display: none;"></div>
+    </div>
+
+  <div style="display: flex; gap: 6px; margin-left: 16px;">
       <button id="btn-1x2" class="split-btn" title="1x2 Grid" style="padding: 2px 6px; display: flex; align-items: center;">
         <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/><rect x="16" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/></svg>
       </button>
@@ -87,14 +92,155 @@
   <script src="https://jieter.github.io/Leaflet.Sync/L.Map.Sync.js"></script>
   <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
   <script>
-    // Placeholder GeoJSON URLs (replace with your actual files)
+    // Layer config for search/autocomplete
     const LAYER_OPTIONS = [
-      { label: 'New GBA Wards', url: 'geojson/gba_wards.geojson', color: 'green' },
-      { label: 'BBMP Wards', url: 'geojson/bbmp_wards.geojson', color: 'blue' },
-      { label: 'Villages', url: 'geojson/villages.geojson', color: 'orange' },
-      { label: 'Settlements', url: 'geojson/bbmp_settlements.geojson', color: 'purple' },
-  { label: 'GBA Zones', url: 'geojson/zones.geojson', color: 'red' }
+      { label: 'New GBA Wards', url: 'geojson/gba_wards.geojson', color: 'green', searchField: 'ward_name' },
+      { label: 'BBMP Wards', url: 'geojson/bbmp_wards.geojson', color: 'blue', searchField: 'Ward Name (en)' },
+      { label: 'Villages', url: 'geojson/villages.geojson', color: 'orange', searchField: 'Village Name' },
+      { label: 'Settlements', url: 'geojson/bbmp_settlements.geojson', color: 'purple', searchField: 'KGISVill_2' },
+      { label: 'GBA Zones', url: 'geojson/zones.geojson', color: 'red', searchField: null } // Not searchable
     ];
+
+    // --- Search/autocomplete logic ---
+    const SEARCHABLE_LAYERS = LAYER_OPTIONS.filter(l => l.searchField);
+    let searchIndex = [];
+
+    async function buildSearchIndex() {
+      searchIndex = [];
+      for (const layer of SEARCHABLE_LAYERS) {
+        try {
+          const resp = await fetch(layer.url);
+          if (!resp.ok) continue;
+          const data = await resp.json();
+          if (!data.features) continue;
+          for (const feat of data.features) {
+            const val = feat.properties[layer.searchField];
+            if (val && typeof val === 'string' && val.trim().length > 0) {
+              searchIndex.push({
+                label: val.trim(),
+                layerLabel: layer.label,
+                layerIdx: LAYER_OPTIONS.indexOf(layer),
+                feature: feat
+              });
+            }
+          }
+        } catch (e) { console.warn('Error loading for search index:', layer.label, e); }
+      }
+      // Sort alphabetically
+      searchIndex.sort((a, b) => a.label.localeCompare(b.label));
+    }
+
+    // --- Autocomplete UI logic ---
+    const searchInput = document.getElementById('location-search');
+    const autocompleteList = document.getElementById('autocomplete-list');
+    let currentFocus = -1;
+
+    function closeAutocomplete() {
+      autocompleteList.style.display = 'none';
+      autocompleteList.innerHTML = '';
+      currentFocus = -1;
+    }
+
+    function highlightFeatureOnMaps(selected) {
+      // Only highlight/zoom on maps already showing the correct layer
+      mapSections.forEach((ms) => {
+        if (ms.loadedLayer === selected.layerIdx) {
+          highlightFeatureInLayer(ms, selected);
+        }
+      });
+    }
+
+    function highlightFeatureInLayer(ms, selected) {
+      if (!ms.geoLayer) return;
+      const field = LAYER_OPTIONS[selected.layerIdx].searchField;
+      const selectedVal = (selected.feature.properties[field] || '').toString().trim().toLowerCase();
+      ms.geoLayer.eachLayer(layer => {
+        if (!layer.feature) return;
+        if (layer.feature.properties && selected.feature.properties) {
+          const layerVal = (layer.feature.properties[field] || '').toString().trim().toLowerCase();
+          if (field && layerVal === selectedVal) {
+            // Zoom to feature
+            if (layer.getBounds) {
+              ms.map.fitBounds(layer.getBounds(), { maxZoom: 16 });
+            } else if (layer.getLatLng) {
+              ms.map.setView(layer.getLatLng(), 16);
+            }
+            // Flash/highlight: set style, open popup
+            if (layer.setStyle) {
+              layer.setStyle({ color: '#ff6600', weight: 4, fillOpacity: 0.3 });
+              setTimeout(() => {
+                layer.setStyle({ color: LAYER_OPTIONS[selected.layerIdx].color, weight: 2, fillOpacity: 0.1 });
+              }, 1800);
+            }
+            if (layer.openPopup) {
+              layer.openPopup();
+            }
+          }
+        }
+      });
+    }
+
+    function showAutocomplete(val) {
+      closeAutocomplete();
+      if (!val || val.length < 2) return;
+      const matches = searchIndex.filter(item => item.label.toLowerCase().includes(val.toLowerCase()));
+      if (matches.length === 0) return;
+      autocompleteList.style.display = 'block';
+      autocompleteList.innerHTML = '';
+      matches.slice(0, 12).forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.style.padding = '7px 12px';
+        div.style.cursor = 'pointer';
+        div.style.borderBottom = '1px solid #eee';
+        div.innerHTML = `<span style="font-weight:600">${item.label}</span> <span style="color:#888;font-size:0.95em;">(${item.layerLabel})</span>`;
+        div.onmousedown = (e) => {
+          e.preventDefault();
+          searchInput.value = item.label;
+          closeAutocomplete();
+          highlightFeatureOnMaps(item);
+        };
+        autocompleteList.appendChild(div);
+      });
+    }
+
+    searchInput.addEventListener('input', function(e) {
+      showAutocomplete(this.value);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+      let items = autocompleteList.getElementsByTagName('div');
+      if (e.key === 'ArrowDown') {
+        currentFocus++;
+        if (currentFocus >= items.length) currentFocus = 0;
+        setActive(items);
+      } else if (e.key === 'ArrowUp') {
+        currentFocus--;
+        if (currentFocus < 0) currentFocus = items.length - 1;
+        setActive(items);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentFocus > -1 && items[currentFocus]) {
+          items[currentFocus].dispatchEvent(new MouseEvent('mousedown'));
+        }
+      }
+    });
+
+    function setActive(items) {
+      for (let i = 0; i < items.length; i++) {
+        items[i].style.background = '#fff';
+      }
+      if (currentFocus > -1 && items[currentFocus]) {
+        items[currentFocus].style.background = '#e3f0ff';
+        items[currentFocus].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    document.addEventListener('click', function(e) {
+      if (e.target !== searchInput) closeAutocomplete();
+    });
+
+    // Call on page load
+    buildSearchIndex();
 
     // Map state
   let mapSections = [];
@@ -153,27 +299,28 @@
         subdomains: 'abcd',
         maxZoom: 19
       }).addTo(map);
+
       // Layer
       let geoLayer = null;
       function loadLayer(layerIdx) {
         if (geoLayer) map.removeLayer(geoLayer);
+        if (layerIdx === undefined || layerIdx === null || isNaN(layerIdx)) {
+          updateDebugStatus('No layer loaded. Please select a layer from the dropdown to proceed.');
+          return;
+        }
         const opt = LAYER_OPTIONS[layerIdx];
-        
         console.log(`Loading layer: ${opt.label} (${opt.url})`);
         updateDebugStatus(`Loading ${opt.label}...`);
-        
         // Find this map in the mapSections array
         const thisMapIndex = mapSections.findIndex(ms => ms.map === map);
         if (thisMapIndex >= 0) {
           mapSections[thisMapIndex].loadedLayer = layerIdx;
         }
-        
         // Create a test popup to verify if GeoJSON files exist
         const testPopup = L.popup()
             .setLatLng(initialCenter)
             .setContent(`<div style="text-align:center">Testing ${opt.label}...</div>`)
             .openOn(map);
-        
         fetch(opt.url)
           .then(r => {
             if (!r.ok) {
@@ -183,11 +330,9 @@
           })
           .then(data => {
             map.closePopup(); // Close test popup
-            
             if (!data || !data.features || data.features.length === 0) {
               console.warn(`No features found in ${opt.url}`);
               updateDebugStatus(`Warning: No features in ${opt.label}`);
-              
               // Show a warning popup
               L.popup()
                 .setLatLng(initialCenter)
@@ -197,7 +342,6 @@
               console.log(`Loaded ${data.features.length} features from ${opt.url}`);
               updateDebugStatus(`Loaded ${opt.label}: ${data.features.length} features`);
             }
-            
             geoLayer = L.geoJSON(data, {
               style: { color: opt.color, weight: 2, fillOpacity: 0.1 },
               onEachFeature: (feature, layer) => {
@@ -205,25 +349,16 @@
                 const title = opt.label;
                 let props = Object.entries(feature.properties).map(([k,v]) => `<b>${k}</b>: ${v}`).join('<br>');
                 const content = `<h4 style="margin:0 0 5px 0;font-size:14px;color:${opt.color}">${title}</h4>${props}`;
-                
                 // Bind popup to this layer
                 layer.bindPopup(content);
-                
                 // Add click handler to propagate clicks to other maps
                 layer.on('click', function(e) {
-                  // Prevent the click from triggering map's click event (to avoid double popups)
                   L.DomEvent.stopPropagation(e);
-                  
-                  // Get the click coordinates
                   const latlng = e.latlng;
-                  
                   console.log(`Feature clicked at ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`);
                   updateDebugStatus(`Clicked: ${feature.properties.ward_name || feature.properties.id || 'feature'}`);
-                  
-                  // Trigger click events on all other maps at this location
                   mapSections.forEach((ms) => {
                     if (ms.map !== map) {
-                      // Simulate a click at the same coordinates
                       ms.map.fire('external-feature-click', {
                         latlng: latlng
                       });
@@ -232,7 +367,6 @@
                 });
               }
             }).addTo(map);
-            
             // IMPORTANT: Update the geoLayer reference in mapSections array
             if (thisMapIndex >= 0) {
               mapSections[thisMapIndex].geoLayer = geoLayer;
@@ -243,7 +377,6 @@
             map.closePopup(); // Close test popup
             console.error(`Error loading GeoJSON from ${opt.url}:`, error);
             updateDebugStatus(`Error loading ${opt.label}`);
-            
             // Show error popup
             L.popup()
               .setLatLng(initialCenter)
@@ -251,8 +384,8 @@
               .openOn(map);
           });
       }
-      // Initial layer
-      loadLayer(0);
+      // Do not load any layer by default
+      updateDebugStatus('No layer loaded. Please select a layer from the dropdown to proceed.');
 
       // Add dropdown as a Leaflet control (topright)
       const LayerDropdown = L.Control.extend({
@@ -264,6 +397,13 @@
           select.style.padding = '2px 6px';
           select.style.fontSize = '1em';
           select.id = `layer-select-${idx}`;
+          // Add 'Select...' option at the top
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = 'Select...';
+          placeholder.disabled = true;
+          placeholder.selected = true;
+          select.appendChild(placeholder);
           LAYER_OPTIONS.forEach((opt, i) => {
             const option = document.createElement('option');
             option.value = i;
@@ -273,6 +413,7 @@
           L.DomEvent.disableClickPropagation(container);
           L.DomEvent.on(select, 'change', function(e) {
             const layerIdx = parseInt(e.target.value);
+            if (isNaN(layerIdx)) return;
             console.log(`Map ${idx} changing to layer: ${LAYER_OPTIONS[layerIdx].label}`);
             loadLayer(layerIdx);
           });
