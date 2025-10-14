@@ -142,11 +142,56 @@
     }
 
     function highlightFeatureOnMaps(selected) {
-      // Only highlight/zoom on maps already showing the correct layer
       mapSections.forEach((ms) => {
-        if (ms.loadedLayer === selected.layerIdx) {
-          highlightFeatureInLayer(ms, selected);
+        // Map 0: multi-layer
+        if (ms.index === 0 && Array.isArray(ms.geoLayers) && ms.geoLayers.length > 0) {
+          if (ms.loadedLayers && ms.loadedLayers.includes(selected.layerIdx)) {
+            highlightFeatureInMultiLayers(ms, selected);
+          }
+        } else if (ms.index !== 0 && ms.geoLayer) {
+          // For other maps, check if the loadedLayer matches the selected layerIdx
+          if (typeof ms.loadedLayer === 'number' && ms.loadedLayer === selected.layerIdx) {
+            highlightFeatureInLayer(ms, selected);
+          }
         }
+      });
+    }
+
+    function highlightFeatureInMultiLayers(ms, selected) {
+      // Find the geoLayer in ms.geoLayers that matches selected.layerIdx
+      const field = LAYER_OPTIONS[selected.layerIdx].searchField;
+      const selectedVal = (selected.feature.properties[field] || '').toString().trim().toLowerCase();
+      ms.geoLayers.forEach((geoLayer, i) => {
+        // Only check the correct layer
+        // We don't have a direct reference to which geoLayer is for which layerIdx, so check a feature property
+        let found = false;
+        geoLayer.eachLayer(layer => {
+          if (!layer.feature) return;
+          if (layer.feature.properties && selected.feature.properties) {
+            const layerVal = (layer.feature.properties[field] || '').toString().trim().toLowerCase();
+            if (field && layerVal === selectedVal) {
+              // Zoom to feature
+              if (!found) {
+                if (layer.getBounds) {
+                  ms.map.fitBounds(layer.getBounds(), { maxZoom: 16 });
+                } else if (layer.getLatLng) {
+                  ms.map.setView(layer.getLatLng(), 16);
+                }
+                found = true;
+              }
+              // Flash/highlight: set style, open popup
+              if (layer.setStyle) {
+                layer.setStyle({ color: '#ff6600', weight: 4, fillOpacity: 0.3 });
+                setTimeout(() => {
+                  layer.setStyle({ color: LAYER_OPTIONS[selected.layerIdx].color, weight: 2, fillOpacity: 0.1 });
+                }, 1800);
+              }
+              if (layer.openPopup) {
+                layer.openPopup();
+              }
+            }
+          }
+        });
       });
     }
 
@@ -340,6 +385,29 @@
             });
             container.appendChild(select);
             L.DomEvent.disableClickPropagation(container);
+            // Attach event listener here so it works after layout changes
+            setTimeout(() => {
+              const selectEl = document.getElementById('multi-layer-select');
+              if (selectEl) {
+                selectEl.addEventListener('change', function() {
+                  const selected = Array.from(selectEl.selectedOptions).map(opt => parseInt(opt.value)).filter(v => !isNaN(v));
+                  const ms0 = mapSections[0];
+                  if (ms0 && ms0.map && typeof ms0.index === 'number' && ms0.index === 0) {
+                    ms0.loadedLayers = selected;
+                    ms0.geoLayers = ms0.geoLayers || [];
+                    ms0.geoLayers.forEach(l => ms0.map.removeLayer(l));
+                    ms0.geoLayers = [];
+                    if (selected.length > 0) {
+                      if (typeof window.loadLayersMultiMap0 === 'function') {
+                        window.loadLayersMultiMap0(selected);
+                      }
+                    } else {
+                      ms0.geoLayers = [];
+                    }
+                  }
+                });
+              }
+            }, 0);
             return container;
           }
         });
@@ -419,6 +487,11 @@
         }
         const opt = LAYER_OPTIONS[layerIdx];
         updateDebugStatus(`Loading ${opt.label}...`);
+        // Update loadedLayer for this mapSection
+        const thisMapIndex = mapSections.findIndex(ms => ms.map === map);
+        if (thisMapIndex >= 0) {
+          mapSections[thisMapIndex].loadedLayer = layerIdx;
+        }
         fetch(opt.url)
           .then(r => {
             if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
@@ -453,6 +526,10 @@
                 });
               }
             }).addTo(map);
+            // Assign geoLayer to ms.geoLayer in mapSections for search/highlight
+            if (thisMapIndex >= 0) {
+              mapSections[thisMapIndex].geoLayer = geoLayer;
+            }
           })
           .catch(error => {
             updateDebugStatus(`Error loading ${opt.label}`);
@@ -518,38 +595,7 @@
           loadedLayer: 0  // Track which layer is loaded
         });
       }
-    // --- Multi-layer select event for map 0 ---
-    document.addEventListener('DOMContentLoaded', function() {
-      const select = document.getElementById('multi-layer-select');
-      if (select) {
-        select.addEventListener('change', function() {
-          const selected = Array.from(select.selectedOptions).map(opt => parseInt(opt.value)).filter(v => !isNaN(v));
-          // Find map 0
-          const ms0 = mapSections[0];
-          if (ms0 && ms0.map && typeof ms0.index === 'number' && ms0.index === 0) {
-            ms0.loadedLayers = selected;
-            // Call the multi-layer loader
-            ms0.geoLayers = ms0.geoLayers || [];
-            // Remove all previous layers
-            ms0.geoLayers.forEach(l => ms0.map.removeLayer(l));
-            ms0.geoLayers = [];
-            if (selected.length > 0) {
-              // Use the function from map 0's scope
-              // We need to call the loadLayersMulti function in map 0's closure
-              // So, we use a hack: call addMapSection again to get a reference, but only if needed
-              // Instead, we can call the function directly if we expose it
-              // For now, use window-scoped function
-              if (typeof window.loadLayersMultiMap0 === 'function') {
-                window.loadLayersMultiMap0(selected);
-              }
-            } else {
-              // No layers selected, clear all
-              ms0.geoLayers = [];
-            }
-          }
-        });
-      }
-    });
+    // (removed: now handled in addMapSection for map 0)
 
     // Expose the multi-layer loader for map 0
     window.loadLayersMultiMap0 = function(selectedLayerIdxs) {
