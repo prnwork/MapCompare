@@ -30,7 +30,7 @@
       min-width: 0;
       min-height: 0;
       position: relative;
-      border: none;
+      border: 1px solid #111;
       border-radius: 0;
       margin: 0;
       display: flex;
@@ -39,6 +39,7 @@
       overflow: hidden;
       width: 100%;
       height: 100%;
+      box-sizing: border-box;
     }
     .map {
       flex: 1 1 auto;
@@ -78,14 +79,46 @@
       <div id="autocomplete-list" style="position: absolute; left: 0; top: 100%; z-index: 1000; background: #fff; border: 1px solid #ccc; border-radius: 0 0 4px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); width: 100%; display: none;"></div>
     </div>
 
-  <div style="display: flex; gap: 6px; margin-left: 16px;">
-      <button id="btn-1x2" class="split-btn" title="1x2 Grid" style="padding: 2px 6px; display: flex; align-items: center;">
-        <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/><rect x="16" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/></svg>
+    <div id="toggle-btn-group" style="display: flex; margin-left: 16px; background: #e3eaf3; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+      <button id="btn-1x2" class="toggle-btn toggle-btn-active" title="1x2 Grid" style="border: none; background: none; padding: 0 14px; height: 36px; display: flex; align-items: center; gap: 6px; font-size: 1em; color: #1976d2; background: #fff; border-right: 1.5px solid #c7d0e0; cursor: pointer; transition: background 0.15s, color 0.15s; outline: none;">
+  <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="16" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/></svg>
       </button>
-      <button id="btn-2x2" class="split-btn" title="2x2 Grid" style="padding: 2px 6px; display: flex; align-items: center;">
-        <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/><rect x="16" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/><rect x="2" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/><rect x="16" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#222" stroke-width="1.5"/></svg>
+      <button id="btn-2x2" class="toggle-btn" title="2x2 Grid" style="border: none; background: none; padding: 0 14px; height: 36px; display: flex; align-items: center; gap: 6px; font-size: 1em; color: #222; background: transparent; cursor: pointer; transition: background 0.15s, color 0.15s; outline: none;">
+  <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="16" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="2" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="16" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/></svg>
       </button>
     </div>
+  <style>
+    .toggle-btn {
+      border: none;
+      background: none;
+      padding: 0 14px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 1em;
+      color: #222;
+      background: transparent;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      outline: none;
+    }
+    .toggle-btn-active {
+      background: #fff !important;
+      color: #1976d2 !important;
+      box-shadow: 0 2px 8px rgba(25,118,210,0.07);
+      z-index: 1;
+    }
+    .toggle-btn:not(.toggle-btn-active):hover {
+      background: #e3f0ff;
+      color: #1976d2;
+    }
+    #toggle-btn-group {
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+  </style>
   </div>
   <div id="map-container"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -383,28 +416,44 @@
       return section;
     }
 
-    // Dynamically update grid layout based on map count
+    // Dynamically update grid layout based on actual DOM map-section count
     function updateGridLayout() {
       const container = document.getElementById('map-container');
-      const count = mapSections.length;
-      if (count === 2) {
+      // Use DOM children count so layout matches what's rendered
+      const count = container.querySelectorAll('.map-section').length;
+
+      // Reset defaults
+      container.style.gridGap = '2px';
+      container.style.background = '#f0f0f0';
+
+      if (count <= 1) {
+        // Single map: full width, single row
+        container.style.gridTemplateColumns = '1fr';
+        container.style.gridTemplateRows = '1fr';
+      } else if (count === 2) {
+        // Two maps: side-by-side
         container.style.gridTemplateColumns = '1fr 1fr';
         container.style.gridTemplateRows = '1fr';
       } else if (count === 3) {
+        // Three maps: two on top, one below
         container.style.gridTemplateColumns = '1fr 1fr';
         container.style.gridTemplateRows = '1fr 1fr';
-      } else if (count === 4) {
+      } else if (count >= 4) {
+        // Four maps: 2x2
         container.style.gridTemplateColumns = '1fr 1fr';
         container.style.gridTemplateRows = '1fr 1fr';
       }
+      // Force maps to resize shortly after layout change
+      setTimeout(() => {
+        mapSections.forEach(ms => { try { ms.map.invalidateSize(); } catch(e){} });
+      }, 120);
     }
 
     function addMapSection() {
       if (mapSections.length >= maxSections) return;
       const idx = mapSections.length;
       const section = createMapSection(idx);
-      document.getElementById('map-container').appendChild(section);
-      updateGridLayout();
+  document.getElementById('map-container').appendChild(section);
       // Create Leaflet map
       const map = L.map(`map${idx}`, {
         center: initialCenter,
@@ -469,12 +518,14 @@
             container.style.borderRadius = '6px';
             container.style.boxShadow = '0 2px 8px rgba(0,0,0,0.07)';
             container.style.display = 'flex';
-            container.style.alignItems = 'center';
+            container.style.flexDirection = 'column';
+            container.style.alignItems = 'stretch';
             const label = document.createElement('label');
-            label.textContent = 'Layers: ';
+            label.textContent = 'Layers:';
             label.style.fontWeight = 'bold';
             label.style.fontSize = '0.98em';
-            label.style.marginRight = '6px';
+            label.style.marginBottom = '2px';
+            label.style.marginRight = '0';
             container.appendChild(label);
             const select = document.createElement('select');
             select.id = 'multi-layer-select';
@@ -755,6 +806,8 @@
           loadedLayer: 0  // Track which layer is loaded
         });
       }
+      // Update layout now that mapSections/DOM have changed
+      updateGridLayout();
     // (removed: now handled in addMapSection for map 0)
 
     // Expose the multi-layer loader for map 0
@@ -1046,8 +1099,18 @@
         const section = document.getElementById(`map-section-${idx}`);
         if (section) section.remove();
         const ms = mapSections.pop();
-        if (ms && ms.map) ms.map.remove();
+        if (ms && ms.map) {
+          // Remove all controls before removing the map to avoid Leaflet errors
+          if (ms.map._controls && Array.isArray(ms.map._controls)) {
+            ms.map._controls.forEach(ctrl => {
+              try { ms.map.removeControl(ctrl); } catch (e) {}
+            });
+          }
+          ms.map.remove();
+        }
       }
+      // Ensure layout updates after we've removed DOM nodes
+      setTimeout(() => updateGridLayout(), 20);
     }
 
     // Helper to force all maps to resize and recenter
@@ -1082,8 +1145,22 @@
     set1x2Grid();
 
     // Grid layout buttons
-    document.getElementById('btn-1x2').onclick = set1x2Grid;
-    document.getElementById('btn-2x2').onclick = set2x2Grid;
+    // Toggle button group logic
+    const btn1x2 = document.getElementById('btn-1x2');
+    const btn2x2 = document.getElementById('btn-2x2');
+    function setActiveToggleBtn(btn) {
+      btn1x2.classList.remove('toggle-btn-active');
+      btn2x2.classList.remove('toggle-btn-active');
+      btn.classList.add('toggle-btn-active');
+    }
+    btn1x2.onclick = function() {
+      setActiveToggleBtn(btn1x2);
+      set1x2Grid();
+    };
+    btn2x2.onclick = function() {
+      setActiveToggleBtn(btn2x2);
+      set2x2Grid();
+    };
   </script>
 </body>
 </html>
