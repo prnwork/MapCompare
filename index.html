@@ -57,6 +57,81 @@
       cursor: pointer;
       font-size: 0.95em;
     }
+    /* Comparison Panel Styles */
+    #comparison-panel {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.32);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    #comparison-panel.active {
+      display: flex;
+    }
+    #comparison-panel-content {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+      padding: 0;
+      min-width: 800px;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: row;
+    }
+    #comparison-left-panel {
+      flex: 1;
+      min-width: 300px;
+      padding: 32px 24px 24px 28px;
+      overflow-y: auto;
+      border-right: 1px solid #e0e0e0;
+    }
+    #comparison-right-panel {
+      flex: 2;
+      min-width: 600px;
+      display: flex;
+      flex-direction: column;
+      background: #f9f9f9;
+    }
+    #comparison-map-legend {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(255,255,255,0.95);
+      padding: 8px 12px;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      font-size: 0.85em;
+      z-index: 1000;
+    }
+    #comparison-panel h3 {
+      margin: 0 0 16px 0;
+      color: #ff9800;
+      font-size: 1.2em;
+    }
+    .comparison-result {
+      margin: 12px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      border-left: 4px solid #2196F3;
+    }
+    .comparison-result.exact-match {
+      border-left-color: #4CAF50;
+    }
+    .comparison-result.partial-match {
+      border-left-color: #FF9800;
+    }
+    .comparison-result.no-match {
+      border-left-color: #F44336;
+    }
     @media (max-width: 900px) {
       #map-container {
         grid-template-columns: 1fr;
@@ -73,7 +148,7 @@
 </head>
 <body>
   <div style="display: flex; align-items: center; justify-content: center; margin-top: 16px; margin-bottom: 8px; gap: 12px; width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto;">
-  <h2 style="margin: 0 12px 0 0; flex-shrink: 0;">Bengaluru Wards & Zones Comparison Map</h2>
+    <h2 style="margin: 0 12px 0 0; flex-shrink: 0;">GBA Area Compare</h2>
     <div id="search-bar-container" style="margin-left: auto; position: relative; min-width: 260px; max-width: 420px; width: 100%; display: flex; align-items: center; gap: 6px;">
       <input id="location-search" type="text" placeholder="Search ward, village, or settlement..." style="flex:1; padding: 7px 10px; font-size: 1em; border: 1.5px solid #bbb; border-radius: 4px; outline: none;" autocomplete="off">
       <div id="autocomplete-list" style="position: absolute; left: 0; top: 100%; z-index: 1000; background: #fff; border: 1px solid #ccc; border-radius: 0 0 4px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); width: 100%; display: none;"></div>
@@ -81,62 +156,144 @@
 
     <div id="toggle-btn-group" style="display: flex; margin-left: 16px; background: #e3eaf3; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
       <button id="btn-1x2" class="toggle-btn toggle-btn-active" title="1x2 Grid" style="border: none; background: none; padding: 0 14px; height: 36px; display: flex; align-items: center; gap: 6px; font-size: 1em; color: #1976d2; background: #fff; border-right: 1.5px solid #c7d0e0; cursor: pointer; transition: background 0.15s, color 0.15s; outline: none;">
-  <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="16" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/></svg>
+        <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="16" y="2" width="10" height="16" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/></svg>
       </button>
       <button id="btn-2x2" class="toggle-btn" title="2x2 Grid" style="border: none; background: none; padding: 0 14px; height: 36px; display: flex; align-items: center; gap: 6px; font-size: 1em; color: #222; background: transparent; cursor: pointer; transition: background 0.15s, color 0.15s; outline: none;">
-  <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="16" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="2" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="16" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/></svg>
+        <svg width="28" height="20" viewBox="0 0 28 20"><rect x="2" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="16" y="2" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="2" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/><rect x="16" y="11" width="10" height="7" rx="2" fill="#f8f8f8" stroke="#1976d2" stroke-width="2"/></svg>
       </button>
     </div>
-  <style>
-    .toggle-btn {
-      border: none;
-      background: none;
-      padding: 0 14px;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 1em;
-      color: #222;
-      background: transparent;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-      outline: none;
-    }
-    .toggle-btn-active {
-      background: #fff !important;
-      color: #1976d2 !important;
-      box-shadow: 0 2px 8px rgba(25,118,210,0.07);
-      z-index: 1;
-    }
-    .toggle-btn:not(.toggle-btn-active):hover {
-      background: #e3f0ff;
-      color: #1976d2;
-    }
-    #toggle-btn-group {
-      border-radius: 6px;
-      overflow: hidden;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-    }
-  </style>
+    <button id="compare-polygons-btn" class="split-btn" style="margin-left: auto; font-weight: 600; background: #ff9800; color: #fff;">🔍 Area Compare</button>
   </div>
   <div id="map-container"></div>
+  
+  <!-- Comparison Panel -->
+  <div id="comparison-panel">
+    <div id="comparison-panel-content">
+      <button id="close-comparison-panel" style="position:absolute; top:10px; right:14px; background:none; border:none; font-size:1.5em; color:#888; cursor:pointer; z-index:10;">&times;</button>
+      
+      <!-- Left Panel: Controls and Results -->
+      <div id="comparison-left-panel">
+        <h3 style="margin:0 0 20px 0; color:#ff9800; font-size:1.2em;">🔍 Area Compare</h3>
+        <div id="comparison-content">
+          <div style="margin-bottom:16px;">
+            <label style="font-weight:600; display:block; margin-bottom:6px;">Base Layer</label>
+            <select id="comparison-base-layer" style="width:100%; padding:8px; font-size:1em; border:1px solid #ccc; border-radius:4px;">
+              <option value="" disabled selected>Select layer...</option>
+            </select>
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="font-weight:600; display:block; margin-bottom:6px;">Select Feature</label>
+            <input id="comparison-search" type="text" placeholder="Search feature..." style="width:100%; padding:8px; font-size:1em; border:1px solid #ccc; border-radius:4px;" autocomplete="off">
+            <div id="comparison-autocomplete" style="position:relative;"></div>
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="font-weight:600; display:block; margin-bottom:6px;">Compare Layer</label>
+            <select id="comparison-compare-layer" style="width:100%; padding:8px; font-size:1em; border:1px solid #ccc; border-radius:4px;">
+              <option value="" disabled selected>Select layer to compare...</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:10px; margin-bottom:16px;">
+            <button id="run-comparison-btn" style="flex:1; padding:10px; background:#1976d2; color:#fff; border:none; border-radius:4px; font-size:1.05em; font-weight:600; cursor:pointer;">Compare</button>
+            <button id="reset-comparison-btn" style="flex:1; padding:10px; background:#bbb; color:#222; border:none; border-radius:4px; font-size:1.05em; font-weight:600; cursor:pointer;">Reset</button>
+          </div>
+          <div id="comparison-results" style="margin-top:16px;"></div>
+        </div>
+      </div>
+      
+      <!-- Right Panel: Map Viewport -->
+      <div id="comparison-right-panel">
+        <div id="comparison-map-container" style="width:100%; height:100%; display:none; position:relative;">
+          <div id="comparison-map" style="width:100%; height:100%;"></div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+  
+  <!-- SVG Patterns for hatching -->
+  <svg width="0" height="0" style="position:absolute;">
+    <defs>
+      <pattern id="diagonalHatch" patternUnits="userSpaceOnUse" width="8" height="8">
+        <path d="M-1,1 l2,-2 M0,8 l8,-8 M7,9 l2,-2" style="stroke:#F44336; stroke-width:1" />
+      </pattern>
+      <pattern id="blueHatch" patternUnits="userSpaceOnUse" width="8" height="8">
+        <path d="M-1,1 l2,-2 M0,8 l8,-8 M7,9 l2,-2" style="stroke:#2196F3; stroke-width:1" />
+      </pattern>
+      <pattern id="greenHatch" patternUnits="userSpaceOnUse" width="8" height="8">
+        <path d="M-1,1 l2,-2 M0,8 l8,-8 M7,9 l2,-2" style="stroke:#4CAF50; stroke-width:1" />
+      </pattern>
+    </defs>
+  </svg>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://jieter.github.io/Leaflet.Sync/L.Map.Sync.js"></script>
   <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
   <script>
-    // Layer config for search/autocomplete
+    // ============================================================================
+    // CONFIGURATION
+    // ============================================================================
     const LAYER_OPTIONS = [
       { label: 'New GBA Wards', url: 'geojson/gba_wards.geojson', color: 'green', searchField: 'ward_name' },
       { label: 'BBMP Wards', url: 'geojson/bbmp_wards.geojson', color: 'blue', searchField: 'Ward Name (en)' },
       { label: 'GBA Final Wards', url: 'geojson/GBA_Final_Wards_369.geojson', color: 'teal', searchField: 'ward_name' },
       { label: 'Villages', url: 'geojson/villages.geojson', color: 'orange', searchField: 'Village Name' },
       { label: 'Settlements', url: 'geojson/bbmp_settlements.geojson', color: 'purple', searchField: 'KGISVill_2' },
-      { label: 'GBA Zones', url: 'geojson/zones.geojson', color: 'red', searchField: null } // Not searchable
+      { label: 'GBA Zones', url: 'geojson/zones.geojson', color: 'red', searchField: null }
     ];
 
-    // --- Search/autocomplete logic ---
     const SEARCHABLE_LAYERS = LAYER_OPTIONS.filter(l => l.searchField);
+    const initialCenter = [12.9716, 77.5946];
+    const initialZoom = 11;
+    const maxSections = 4;
+
+    // ============================================================================
+    // UTILITY FUNCTIONS
+    // ============================================================================
+    
+    // Get filtered popup properties based on layer type
+    function getPopupProps(label, props) {
+      switch (label) {
+        case 'GBA Final Wards':
+        case 'New GBA Wards':
+          return `<b>Corporation</b>: ${props.Corporation || ''}<br><b>Ward Name</b>: ${props.ward_name || ''}`;
+        case 'BBMP Wards':
+          return `<b>Ward Name (en)</b>: ${props['Ward Name (en)'] || ''}`;
+        case 'Villages':
+          return `<b>fid</b>: ${props.fid || ''}<br><b>Village Name</b>: ${props['Village Name'] || ''}`;
+        case 'Settlements':
+          return `<b>KGISVillageID</b>: ${props.KGISVillageID || ''}<br><b>Category</b>: ${props.Category || ''}<br><b>Kharab</b>: ${props.Kharab || ''}<br><b>Surveynumber_Old</b>: ${props.Surveynumber_Old || ''}<br><b>KGISVill_2</b>: ${props.KGISVill_2 || ''}`;
+        case 'GBA Zones':
+          return `<b>Corporation/Zone</b>: ${props['Corporation/Zone'] || ''}`;
+        default:
+          return Object.entries(props).map(([k,v]) => `<b>${k}</b>: ${v}`).join('<br>');
+      }
+    }
+
+    // Create popup HTML with lat/lng copy button
+    function createPopupContent(layerLabel, layerColor, props, lat, lng) {
+      const propsHtml = getPopupProps(layerLabel, props);
+      const copyHtml = (lat && lng) ? 
+        `<div style='margin-top:6px;font-size:0.97em;'>Lat: <b>${lat.toFixed ? lat.toFixed(6) : lat}</b><br>Lng: <b>${lng.toFixed ? lng.toFixed(6) : lng}</b><br><button id='copy-latlng-btn' style='margin-top:4px;padding:2px 10px;font-size:0.98em;cursor:pointer;'>Copy</button></div>` 
+        : '';
+      return `<h4 style="margin:0 0 5px 0;font-size:14px;color:${layerColor}">${layerLabel}</h4>${propsHtml}${copyHtml}`;
+    }
+
+    // Attach copy button handler to popup
+    function attachCopyButtonHandler(lat, lng) {
+      setTimeout(() => {
+        const btn = document.getElementById('copy-latlng-btn');
+        if (btn && lat && lng) {
+          btn.onclick = function() {
+            navigator.clipboard.writeText(`${lat}, ${lng}`);
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+          };
+        }
+      }, 100);
+    }
+
+    // ============================================================================
+    // SEARCH & AUTOCOMPLETE
+    // ============================================================================
     let searchIndex = [];
 
     async function buildSearchIndex() {
@@ -395,13 +552,10 @@
     // Call on page load
     buildSearchIndex();
 
-    // Map state
-  let mapSections = [];
-  const maxSections = 4;
-
-    // Initial center (Bengaluru)
-    const initialCenter = [12.9716, 77.5946];
-    const initialZoom = 11;
+    // ============================================================================
+    // MAP MANAGEMENT
+    // ============================================================================
+    let mapSections = [];
 
     function createMapSection(idx) {
       const section = document.createElement('div');
@@ -454,7 +608,7 @@
       if (mapSections.length >= maxSections) return;
       const idx = mapSections.length;
       const section = createMapSection(idx);
-  document.getElementById('map-container').appendChild(section);
+      document.getElementById('map-container').appendChild(section);
       // Create Leaflet map
       const map = L.map(`map${idx}`, {
         center: initialCenter,
@@ -608,7 +762,6 @@
                 style: { color: opt.color, weight: 2, fillOpacity: 0.1 },
                 onEachFeature: (feature, layer) => {
                   const title = opt.label;
-                  let props = Object.entries(feature.properties).map(([k,v]) => `<b>${k}</b>: ${v}`).join('<br>');
                   let lat = '';
                   let lng = '';
                   if (feature.geometry && feature.geometry.type && feature.geometry.coordinates) {
@@ -621,21 +774,9 @@
                       lng = c.lng;
                     }
                   }
-                  const copyHtml = (lat && lng) ? `<div style='margin-top:6px;font-size:0.97em;'>Lat: <b>${lat.toFixed ? lat.toFixed(6) : lat}</b><br>Lng: <b>${lng.toFixed ? lng.toFixed(6) : lng}</b><br><button id='copy-latlng-btn' style='margin-top:4px;padding:2px 10px;font-size:0.98em;cursor:pointer;'>Copy</button></div>` : '';
-                  const content = `<h4 style=\"margin:0 0 5px 0;font-size:14px;color:${opt.color}\">${title}</h4>${props}${copyHtml}`;
+                  const content = createPopupContent(title, opt.color, feature.properties, lat, lng);
                   layer.bindPopup(content);
-                  layer.on('popupopen', function(e) {
-                    setTimeout(() => {
-                      const btn = document.getElementById('copy-latlng-btn');
-                      if (btn && lat && lng) {
-                        btn.onclick = function() {
-                          navigator.clipboard.writeText(`${lat}, ${lng}`);
-                          btn.textContent = 'Copied!';
-                          setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
-                        };
-                      }
-                    }, 100);
-                  });
+                  layer.on('popupopen', () => attachCopyButtonHandler(lat, lng));
                   layer.on('click', function(e) {
                     L.DomEvent.stopPropagation(e);
                     const latlng = e.latlng;
@@ -698,7 +839,6 @@
               style: { color: opt.color, weight: 2, fillOpacity: 0.1 },
               onEachFeature: (feature, layer) => {
                 const title = opt.label;
-                let props = Object.entries(feature.properties).map(([k,v]) => `<b>${k}</b>: ${v}`).join('<br>');
                 let lat = '';
                 let lng = '';
                 if (feature.geometry && feature.geometry.type && feature.geometry.coordinates) {
@@ -711,21 +851,10 @@
                     lng = c.lng;
                   }
                 }
-                const copyHtml = (lat && lng) ? `<div style='margin-top:6px;font-size:0.97em;'>Lat: <b>${lat.toFixed ? lat.toFixed(6) : lat}</b><br>Lng: <b>${lng.toFixed ? lng.toFixed(6) : lng}</b><br><button id='copy-latlng-btn' style='margin-top:4px;padding:2px 10px;font-size:0.98em;cursor:pointer;'>Copy</button></div>` : '';
-                const content = `<h4 style=\"margin:0 0 5px 0;font-size:14px;color:${opt.color}\">${title}</h4>${props}${copyHtml}`;
+
+                const content = createPopupContent(title, opt.color, feature.properties, lat, lng);
                 layer.bindPopup(content);
-                layer.on('popupopen', function(e) {
-                  setTimeout(() => {
-                    const btn = document.getElementById('copy-latlng-btn');
-                    if (btn && lat && lng) {
-                      btn.onclick = function() {
-                        navigator.clipboard.writeText(`${lat}, ${lng}`);
-                        btn.textContent = 'Copied!';
-                        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
-                      };
-                    }
-                  }, 100);
-                });
+                layer.on('popupopen', () => attachCopyButtonHandler(lat, lng));
                 layer.on('click', function(e) {
                   L.DomEvent.stopPropagation(e);
                   const latlng = e.latlng;
@@ -834,9 +963,21 @@
               style: { color: opt.color, weight: 2, fillOpacity: 0.1 },
               onEachFeature: (feature, layer) => {
                 const title = opt.label;
-                let props = Object.entries(feature.properties).map(([k,v]) => `<b>${k}</b>: ${v}`).join('<br>');
-                const content = `<h4 style=\"margin:0 0 5px 0;font-size:14px;color:${opt.color}\">${title}</h4>${props}`;
+                let lat = '';
+                let lng = '';
+                if (feature.geometry && feature.geometry.type && feature.geometry.coordinates) {
+                  if (feature.geometry.type === 'Point') {
+                    lat = feature.geometry.coordinates[1];
+                    lng = feature.geometry.coordinates[0];
+                  } else if (layer.getBounds) {
+                    const c = layer.getBounds().getCenter();
+                    lat = c.lat;
+                    lng = c.lng;
+                  }
+                }
+                const content = createPopupContent(title, opt.color, feature.properties, lat, lng);
                 layer.bindPopup(content);
+                layer.on('popupopen', () => attachCopyButtonHandler(lat, lng));
                 layer.on('click', function(e) {
                   L.DomEvent.stopPropagation(e);
                   const latlng = e.latlng;
@@ -1162,6 +1303,379 @@
       setActiveToggleBtn(btn2x2);
       set2x2Grid();
     };
+
+    // ============================================================================
+    // AREA COMPARISON FEATURE
+    // ============================================================================
+    
+    // State management
+    let comparisonLayers = {};
+    let comparisonOverlays = [];
+    let selectedBaseFeature = null;
+
+    // Data loading
+    async function loadComparisonData() {
+      for (const layer of LAYER_OPTIONS) {
+        if (!comparisonLayers[layer.label]) {
+          try {
+            const resp = await fetch(layer.url);
+            if (resp.ok) {
+              const data = await resp.json();
+              comparisonLayers[layer.label] = data;
+            }
+          } catch (e) {
+            console.warn('Error loading comparison data:', layer.label, e);
+          }
+        }
+      }
+    }
+
+    // UI Setup
+    const comparisonPanel = document.getElementById('comparison-panel');
+    const comparePolygonsBtn = document.getElementById('compare-polygons-btn');
+    const closeComparisonPanel = document.getElementById('close-comparison-panel');
+    const comparisonBaseLayer = document.getElementById('comparison-base-layer');
+    const comparisonCompareLayer = document.getElementById('comparison-compare-layer');
+    const comparisonSearch = document.getElementById('comparison-search');
+    const comparisonAutocomplete = document.getElementById('comparison-autocomplete');
+    const runComparisonBtn = document.getElementById('run-comparison-btn');
+    const resetComparisonBtn = document.getElementById('reset-comparison-btn');
+    const comparisonResults = document.getElementById('comparison-results');
+    const comparisonMapContainer = document.getElementById('comparison-map-container');
+    let comparisonMap = null;
+
+    // Populate base layer dropdown
+    SEARCHABLE_LAYERS.forEach((layer, i) => {
+      const opt = document.createElement('option');
+      opt.value = LAYER_OPTIONS.indexOf(layer);
+      opt.textContent = layer.label;
+      comparisonBaseLayer.appendChild(opt);
+    });
+    
+    // Populate compare layer dropdown
+    SEARCHABLE_LAYERS.forEach((layer, i) => {
+      const opt = document.createElement('option');
+      opt.value = LAYER_OPTIONS.indexOf(layer);
+      opt.textContent = layer.label;
+      comparisonCompareLayer.appendChild(opt);
+    });
+
+    comparePolygonsBtn.addEventListener('click', () => {
+      comparisonPanel.classList.add('active');
+      loadComparisonData();
+      // Initialize comparison map if not already done
+      setTimeout(() => {
+        if (!comparisonMap) {
+          comparisonMap = L.map('comparison-map', {
+            center: initialCenter,
+            zoom: 11,
+            zoomControl: true,
+            scrollWheelZoom: true
+          });
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19,
+            opacity: 0.85
+          }).addTo(comparisonMap);
+        }
+      }, 100);
+    });
+
+    closeComparisonPanel.addEventListener('click', () => {
+      comparisonPanel.classList.remove('active');
+      clearComparisonOverlays();
+    });
+
+    // Close modal on background click
+    comparisonPanel.addEventListener('click', (e) => {
+      if (e.target === comparisonPanel) {
+        comparisonPanel.classList.remove('active');
+        clearComparisonOverlays();
+      }
+    });
+
+    // Event Handlers - Autocomplete
+    comparisonSearch.addEventListener('input', function() {
+      const layerIdx = parseInt(comparisonBaseLayer.value);
+      const val = this.value.trim().toLowerCase();
+      comparisonAutocomplete.innerHTML = '';
+      comparisonAutocomplete.style.display = 'none';
+      if (!val || isNaN(layerIdx)) return;
+      const opt = LAYER_OPTIONS[layerIdx];
+      const matches = searchIndex.filter(item => item.layerLabel === opt.label && item.label.toLowerCase().includes(val));
+      const results = matches.slice(0, 10);
+      if (results.length === 0) return;
+      comparisonAutocomplete.style.display = 'block';
+      comparisonAutocomplete.innerHTML = '<div style="position:absolute; left:0; top:2px; z-index:1001; background:#fff; border:1px solid #ccc; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.08); width:100%; max-height:200px; overflow-y:auto;">' +
+        results.map((item, i) => `<div class="comparison-ac-item" data-idx="${i}" style="padding:7px 12px; cursor:pointer; border-bottom:1px solid #eee;">${item.label}</div>`).join('') + '</div>';
+      Array.from(comparisonAutocomplete.querySelectorAll('.comparison-ac-item')).forEach((el, i) => {
+        el.addEventListener('mousedown', function(e) {
+          comparisonSearch.value = results[i].label;
+          selectedBaseFeature = results[i].feature;
+          comparisonAutocomplete.style.display = 'none';
+        });
+        el.addEventListener('mouseover', function() {
+          this.style.background = '#e3f0ff';
+        });
+        el.addEventListener('mouseout', function() {
+          this.style.background = '#fff';
+        });
+      });
+    });
+
+    // Event Handlers - Run Comparison
+    runComparisonBtn.addEventListener('click', async () => {
+      if (!selectedBaseFeature) {
+        alert('Please select a feature to compare');
+        return;
+      }
+      const baseLayerIdx = parseInt(comparisonBaseLayer.value);
+      if (isNaN(baseLayerIdx)) {
+        alert('Please select a base layer');
+        return;
+      }
+      const compareLayerIdx = parseInt(comparisonCompareLayer.value);
+      if (isNaN(compareLayerIdx)) {
+        alert('Please select a compare layer');
+        return;
+      }
+      await performComparison(selectedBaseFeature, baseLayerIdx, compareLayerIdx);
+    });
+
+    // Add Reset button logic
+    if (resetComparisonBtn) {
+      resetComparisonBtn.onclick = function() {
+        comparisonResults.innerHTML = '';
+        clearComparisonOverlays();
+        comparisonSearch.value = '';
+        selectedBaseFeature = null;
+        comparisonBaseLayer.selectedIndex = 0;
+        comparisonCompareLayer.selectedIndex = 0;
+      };
+    }
+
+    // Core Comparison Logic
+    function clearComparisonOverlays() {
+      comparisonOverlays.forEach(overlay => {
+        if (comparisonMap && overlay) {
+          try { comparisonMap.removeLayer(overlay); } catch(e) {}
+        }
+      });
+      comparisonOverlays = [];
+      if (comparisonMapContainer) {
+        comparisonMapContainer.style.display = 'none';
+      }
+    }
+
+    // Perform geometry comparison
+    async function performComparison(baseFeature, baseLayerIdx, compareLayerIdx) {
+      clearComparisonOverlays();
+      comparisonResults.innerHTML = '<div style="text-align:center; padding:20px;"><div style="border:3px solid #1976d2; border-radius:50%; border-top-color:transparent; width:30px; height:30px; animation:spin 1s linear infinite; margin:0 auto;"></div><p style="margin-top:10px;">Analyzing geometry...</p></div>';
+      
+      await loadComparisonData();
+      
+      const baseLayerLabel = LAYER_OPTIONS[baseLayerIdx].label;
+      const compareLayerLabel = LAYER_OPTIONS[compareLayerIdx].label;
+      const baseArea = turf.area(baseFeature);
+      
+      let resultsHtml = `<div style="margin-bottom:16px; padding:10px; background:#e3f0ff; border-radius:4px;">
+        <strong>Base:</strong> ${baseLayerLabel}<br>
+        <strong>Feature:</strong> ${baseFeature.properties[LAYER_OPTIONS[baseLayerIdx].searchField]}<br>
+        <strong>Area:</strong> ${(baseArea / 1000000).toFixed(2)} sq km<br>
+        <strong>Comparing with:</strong> ${compareLayerLabel}
+      </div>`;
+      
+      const compareLayerData = comparisonLayers[compareLayerLabel];
+      if (!compareLayerData || !compareLayerData.features) {
+        resultsHtml += '<div style="color:#f44336;">Error: Compare layer data not available</div>';
+        comparisonResults.innerHTML = resultsHtml;
+        return;
+      }
+      
+      // Find ALL features that overlap/intersect the base feature
+      const overlappingFeatures = [];
+      compareLayerData.features.forEach(feature => {
+        try {
+          const intersection = turf.intersect(baseFeature, feature);
+          if (intersection) {
+            const overlapArea = turf.area(intersection);
+            const featureArea = turf.area(feature);
+            const overlapPercent = (overlapArea / baseArea) * 100;
+            const matchPercent = (overlapArea / featureArea) * 100;
+            
+            overlappingFeatures.push({
+              feature: feature,
+              overlapArea: overlapArea,
+              featureArea: featureArea,
+              overlapPercent: overlapPercent,
+              matchPercent: matchPercent,
+              intersection: intersection
+            });
+          }
+        } catch (e) {
+          console.warn('Error checking intersection:', e);
+        }
+      });
+      
+      if (overlappingFeatures.length === 0) {
+        resultsHtml += '<div style="color:#666; padding:10px; background:#f5f5f5; border-radius:4px;">No overlapping features found in ' + compareLayerLabel + '</div>';
+      } else {
+        resultsHtml += `<div style="font-weight:600; margin:12px 0 8px 0; color:#1976d2;">Found ${overlappingFeatures.length} overlapping feature(s):</div>`;
+        
+        // Sort by overlap percentage (descending)
+        overlappingFeatures.sort((a, b) => b.overlapPercent - a.overlapPercent);
+        
+        overlappingFeatures.forEach((item, idx) => {
+          let matchType = 'partial-match';
+          let matchLabel = 'Partial Match';
+          if (item.overlapPercent > 99 && item.matchPercent > 99) {
+            matchType = 'exact-match';
+            matchLabel = '✓ Exact Match';
+          } else if (item.overlapPercent < 50) {
+            matchType = 'no-match';
+            matchLabel = 'Low Overlap';
+          }
+          
+          const featureName = item.feature.properties[LAYER_OPTIONS[compareLayerIdx].searchField] || 'Unnamed';
+          resultsHtml += `<div class="comparison-result ${matchType}">
+            <strong>${idx + 1}. ${featureName}</strong><br>
+            <span style="font-size:0.9em; color:#666;">
+              Overlap: ${item.overlapPercent.toFixed(1)}% of base<br>
+              Match: ${item.matchPercent.toFixed(1)}% of feature<br>
+              ${matchLabel}
+            </span>
+          </div>`;
+        });
+        
+        // Visualize all overlapping features
+        visualizeAllComparisons(baseFeature, overlappingFeatures, LAYER_OPTIONS[compareLayerIdx].color);
+      }
+      
+      comparisonResults.innerHTML = resultsHtml;
+    }
+
+    // Visualize comparison on modal map
+    function visualizeAllComparisons(baseFeature, overlappingFeatures, color) {
+      if (!comparisonMap) return;
+      
+      try {
+        // Show map container
+        comparisonMapContainer.style.display = 'block';
+        
+        // Color palette for overlapping features
+        const featureColors = [
+          '#2196F3', // Blue
+          '#9C27B0', // Purple
+          '#E91E63', // Pink
+          '#00BCD4', // Cyan
+          '#FF5722', // Deep Orange
+          '#009688', // Teal
+          '#FFC107', // Amber
+          '#795548', // Brown
+          '#607D8B', // Blue Grey
+          '#3F51B5'  // Indigo
+        ];
+        
+        // Draw base feature with black border for easy identification
+        const baseLayer = L.geoJSON(baseFeature, {
+          style: {
+            fillColor: '#FF9800',
+            fillOpacity: 0.25,
+            color: '#000000',
+            weight: 6
+          }
+        }).bindPopup('Base Feature').addTo(comparisonMap);
+        comparisonOverlays.push(baseLayer);
+        
+        // Draw all overlapping features from compare layer with different colors
+               overlappingFeatures.forEach((item, idx) => {
+          const featureColor = featureColors[idx % featureColors.length];
+          const compareLayerIdx = parseInt(comparisonCompareLayer.value);
+          const layerLabel = LAYER_OPTIONS[compareLayerIdx].label;
+          const props = item.feature.properties;
+          let popupHtml = getPopupProps(layerLabel, props);
+          // Add overlap info
+          popupHtml += `<br><span style='color:${featureColor};font-weight:600;'>Overlap: ${item.overlapPercent.toFixed(1)}%</span>`;
+          const featureLayer = L.geoJSON(item.feature, {
+            style: {
+              fillColor: featureColor,
+              fillOpacity: 0.3,
+              color: featureColor,
+              weight: 2
+            }
+          }).bindPopup(popupHtml).addTo(comparisonMap);
+          comparisonOverlays.push(featureLayer);
+          
+          // Draw intersection (overlap) with hatched pattern
+          if (item.intersection) {
+            // Create unique pattern ID for this overlap
+            const patternId = `hatch-${idx}-${Date.now()}`;
+            
+            // Create SVG pattern element
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.style.position = 'absolute';
+            svg.style.width = '0';
+            svg.style.height = '0';
+            
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+            pattern.setAttribute('id', patternId);
+            pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+            pattern.setAttribute('width', '8');
+            pattern.setAttribute('height', '8');
+            pattern.setAttribute('patternTransform', 'rotate(45)');
+            
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', '0');
+            line.setAttribute('y1', '0');
+            line.setAttribute('x2', '0');
+            line.setAttribute('y2', '8');
+            line.setAttribute('stroke', featureColor);
+            line.setAttribute('stroke-width', '1.5');
+            
+            pattern.appendChild(line);
+            defs.appendChild(pattern);
+            svg.appendChild(defs);
+            document.body.appendChild(svg);
+            
+            const overlapLayer = L.geoJSON(item.intersection, {
+              style: {
+                fillPattern: `url(#${patternId})`,
+                fillColor: featureColor,
+                fillOpacity: 0.4,
+                color: featureColor,
+                weight: 2.5
+              },
+              renderer: L.svg()
+            }).bindPopup(`Overlap ${idx + 1}: ${item.overlapPercent.toFixed(1)}%`).addTo(comparisonMap);
+            
+            // Apply pattern using direct SVG manipulation
+            setTimeout(() => {
+              const paths = overlapLayer._container?.querySelectorAll('path') || [];
+              paths.forEach(path => {
+                path.style.fill = `url(#${patternId})`;
+              });
+            }, 100);
+            
+            comparisonOverlays.push(overlapLayer);
+          }
+        });
+        
+        // Zoom to base feature bounds
+        const baseLayerBounds = L.geoJSON(baseFeature);
+        comparisonMap.fitBounds(baseLayerBounds.getBounds(), { padding: [50, 50], maxZoom: 14 });
+        
+        // Invalidate size to fix display issues
+        setTimeout(() => comparisonMap.invalidateSize(), 100);
+      } catch (e) {
+        console.warn('Error visualizing comparison:', e);
+      }
+    }
+
+    // Add spinner animation
+    const style = document.createElement('style');
+    style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
   </script>
 </body>
 </html>
