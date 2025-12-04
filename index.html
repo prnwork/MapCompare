@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -87,15 +88,15 @@
       flex-direction: row;
     }
     #comparison-left-panel {
-      flex: 1;
-      min-width: 300px;
+      flex: 0 0 350px;
+      width: 350px;
       padding: 32px 24px 24px 28px;
       overflow-y: auto;
       border-right: 1px solid #e0e0e0;
     }
     #comparison-right-panel {
-      flex: 2;
-      min-width: 600px;
+      flex: 0 0 1200px;
+      width: 1200px;
       display: flex;
       flex-direction: column;
       background: #f9f9f9;
@@ -128,7 +129,9 @@
     }
     .comparison-result.partial-match {
       border-left-color: #FF9800;
-    }
+        // Direct mapping for feature overlays
+        window.comparisonFeatureOverlayMap = [];
+        overlappingFeatures.forEach((item, idx) => {
     .comparison-result.no-match {
       border-left-color: #F44336;
     }
@@ -145,9 +148,11 @@
     }
 
   </style>
+
 </head>
 <body>
   <div style="display: flex; align-items: center; justify-content: center; margin-top: 16px; margin-bottom: 8px; gap: 12px; width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto;">
+  <div id="svg-patterns" style="display:none"></div>
     <h2 style="margin: 0 12px 0 0; flex-shrink: 0;">GBA Area Compare</h2>
     <div id="search-bar-container" style="margin-left: auto; position: relative; min-width: 260px; max-width: 420px; width: 100%; display: flex; align-items: center; gap: 6px;">
       <input id="location-search" type="text" placeholder="Search ward, village, or settlement..." style="flex:1; padding: 7px 10px; font-size: 1em; border: 1.5px solid #bbb; border-radius: 4px; outline: none;" autocomplete="off">
@@ -241,6 +246,19 @@
     ];
 
     const SEARCHABLE_LAYERS = LAYER_OPTIONS.filter(l => l.searchField);
+        // Color palette for overlapping features (global for comparison logic)
+        const featureColors = [
+          '#2196F3', // Blue
+          '#9C27B0', // Purple
+          '#E91E63', // Pink
+          '#00BCD4', // Cyan
+          '#FF5722', // Deep Orange
+          '#009688', // Teal
+          '#FFC107', // Amber
+          '#795548', // Brown
+          '#607D8B', // Blue Grey
+          '#3F51B5'  // Indigo
+        ];
     const initialCenter = [12.9716, 77.5946];
     const initialZoom = 11;
     const maxSections = 4;
@@ -1370,13 +1388,31 @@
             center: initialCenter,
             zoom: 11,
             zoomControl: true,
-            scrollWheelZoom: true
+            scrollWheelZoom: false,
+            zoomSnap: 0.05,
+            zoomDelta: 1
           });
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
             maxZoom: 19,
             opacity: 0.85
           }).addTo(comparisonMap);
+          
+          // Custom scroll wheel zoom with Ctrl for fine control
+          const mapElement = document.getElementById('comparison-map');
+          mapElement.addEventListener('wheel', function(e) {
+            if (e.ctrlKey) {
+              e.preventDefault();
+              const delta = e.deltaY > 0 ? -0.05 : 0.05;
+              const currentZoom = comparisonMap.getZoom();
+              comparisonMap.setZoom(currentZoom + delta, { animate: false });
+            } else {
+              e.preventDefault();
+              const delta = e.deltaY > 0 ? -1 : 1;
+              const currentZoom = comparisonMap.getZoom();
+              comparisonMap.setZoom(currentZoom + delta);
+            }
+          }, { passive: false });
         }
       }, 100);
     });
@@ -1470,10 +1506,9 @@
     // Perform geometry comparison
     async function performComparison(baseFeature, baseLayerIdx, compareLayerIdx) {
       clearComparisonOverlays();
+      window.comparisonFeatureOverlayMap = [];
       comparisonResults.innerHTML = '<div style="text-align:center; padding:20px;"><div style="border:3px solid #1976d2; border-radius:50%; border-top-color:transparent; width:30px; height:30px; animation:spin 1s linear infinite; margin:0 auto;"></div><p style="margin-top:10px;">Analyzing geometry...</p></div>';
-      
       await loadComparisonData();
-      
       const baseLayerLabel = LAYER_OPTIONS[baseLayerIdx].label;
       const compareLayerLabel = LAYER_OPTIONS[compareLayerIdx].label;
       const baseArea = turf.area(baseFeature);
@@ -1517,160 +1552,294 @@
         }
       });
       
-      if (overlappingFeatures.length === 0) {
-        resultsHtml += '<div style="color:#666; padding:10px; background:#f5f5f5; border-radius:4px;">No overlapping features found in ' + compareLayerLabel + '</div>';
-      } else {
-        resultsHtml += `<div style="font-weight:600; margin:12px 0 8px 0; color:#1976d2;">Found ${overlappingFeatures.length} overlapping feature(s):</div>`;
-        
-        // Sort by overlap percentage (descending)
-        overlappingFeatures.sort((a, b) => b.overlapPercent - a.overlapPercent);
-        
-        overlappingFeatures.forEach((item, idx) => {
-          let matchType = 'partial-match';
-          let matchLabel = 'Partial Match';
-          if (item.overlapPercent > 99 && item.matchPercent > 99) {
-            matchType = 'exact-match';
-            matchLabel = '✓ Exact Match';
-          } else if (item.overlapPercent < 50) {
-            matchType = 'no-match';
-            matchLabel = 'Low Overlap';
+      resultsHtml += renderComparisonResults(overlappingFeatures, compareLayerIdx);
+      comparisonResults.innerHTML = resultsHtml;
+      attachComparisonResultHandlers();
+      // Show right panel viewport with overlays
+      drawComparisonOverlays(baseFeature, overlappingFeatures, compareLayerIdx);
+          function renderComparisonResultEntry({ idx, matchType, matchLabel, featureColor, featureName, overlapPercent, matchPercent }) {
+            return `<div class="comparison-result ${matchType}" style="border-left: 8px solid ${featureColor}; cursor:pointer; display:flex; align-items:flex-start; gap:8px;" data-idx="${idx}">
+              <input type="checkbox" id="checkbox-${idx}" data-idx="${idx}" checked style="margin-top:4px; cursor:pointer; width:18px; height:18px;">
+              <div style="flex:1;" data-idx="${idx}">
+                <span style="display:inline-block; width:16px; height:16px; background:${featureColor}; border-radius:3px; margin-right:8px; vertical-align:middle;"></span>
+                <strong>${idx + 1}. ${featureName}</strong><br>
+                <span style="font-size:0.9em; color:#666;">
+                  Overlap: ${overlapPercent.toFixed(1)}% of base<br>
+                  Match: ${matchPercent.toFixed(1)}% of feature<br>
+                  ${matchLabel}
+                </span>
+              </div>
+            </div>`;
           }
-          
-          const featureName = item.feature.properties[LAYER_OPTIONS[compareLayerIdx].searchField] || 'Unnamed';
-          resultsHtml += `<div class="comparison-result ${matchType}">
-            <strong>${idx + 1}. ${featureName}</strong><br>
-            <span style="font-size:0.9em; color:#666;">
-              Overlap: ${item.overlapPercent.toFixed(1)}% of base<br>
-              Match: ${item.matchPercent.toFixed(1)}% of feature<br>
-              ${matchLabel}
-            </span>
-          </div>`;
-        });
-        
-        // Visualize all overlapping features
-        visualizeAllComparisons(baseFeature, overlappingFeatures, LAYER_OPTIONS[compareLayerIdx].color);
-      }
+          function showComparisonSpinner() {
+            comparisonResults.innerHTML = '<div style="text-align:center; padding:20px;"><div style="border:3px solid #1976d2; border-radius:50%; border-top-color:transparent; width:30px; height:30px; animation:spin 1s linear infinite; margin:0 auto;"></div><p style="margin-top:10px;">Analyzing geometry...</p></div>';
+          }
+
+          function renderComparisonHeader(baseFeature, baseLayerLabel, baseLayerIdx, compareLayerLabel) {
+            const baseArea = turf.area(baseFeature);
+            return `<div style="margin-bottom:16px; padding:10px; background:#e3f0ff; border-radius:4px;">
+              <strong>Base:</strong> ${baseLayerLabel}<br>
+              <strong>Feature:</strong> ${baseFeature.properties[LAYER_OPTIONS[baseLayerIdx].searchField]}<br>
+              <strong>Area:</strong> ${(baseArea / 1000000).toFixed(2)} sq km<br>
+              <strong>Comparing with:</strong> ${compareLayerLabel}
+            </div>`;
+          }
+
+          function findOverlappingFeatures(baseFeature, compareFeatures, baseLayerIdx, compareLayerIdx) {
+            const baseArea = turf.area(baseFeature);
+            const overlappingFeatures = [];
+            compareFeatures.forEach(feature => {
+              try {
+                const intersection = turf.intersect(baseFeature, feature);
+                if (intersection) {
+                  const overlapArea = turf.area(intersection);
+                  const featureArea = turf.area(feature);
+                  const overlapPercent = (overlapArea / baseArea) * 100;
+                  const matchPercent = (overlapArea / featureArea) * 100;
+                  overlappingFeatures.push({
+                    feature,
+                    overlapArea,
+                    featureArea,
+                    overlapPercent,
+                    matchPercent,
+                    intersection
+                  });
+                }
+              } catch (e) {
+                console.warn('Error checking intersection:', e);
+              }
+            });
+            return overlappingFeatures;
+          }
+
+          function renderComparisonResults(overlappingFeatures, compareLayerIdx) {
+            if (overlappingFeatures.length === 0) {
+              return '<div style="color:#666; padding:10px; background:#f5f5f5; border-radius:4px;">No overlapping features found.</div>';
+            }
+            let html = `<div style="font-weight:600; margin:12px 0 8px 0; color:#1976d2; display:flex; align-items:center; gap:8px;">
+              Found ${overlappingFeatures.length} overlapping feature(s):
+              <button id="comparison-info-btn" title="What do these terms mean?" style="background:none; border:none; cursor:pointer; padding:0; margin:0;">
+                <span style="display:inline-block; width:20px; height:20px; border-radius:50%; background:#1976d2; color:#fff; text-align:center; font-weight:bold; font-size:1em; line-height:20px;">i</span>
+              </button>
+            </div>`;
+
+            // Info Modal for explanation
+            const infoModalHtml = `
+              <div id="comparison-info-modal" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.32); z-index:3000; display:flex; align-items:center; justify-content:center;">
+                <div style="background:#fff; border-radius:8px; box-shadow:0 4px 24px rgba(0,0,0,0.18); padding:32px 28px; max-width:400px; width:90vw;">
+                  <h3 style="margin-top:0; color:#1976d2;">Comparison Terms Explained</h3>
+                  <ul style="padding-left:18px;">
+                    <li><strong>Overlap:</strong> The percentage of the base area that is covered by the selected feature.</li>
+                    <li><strong>Match:</strong> The percentage of the selected feature's area that overlaps with the base area.</li>
+                    <li><strong>Low Overlap:</strong> Indicates that less than 50% of the base area is covered by the feature. This usually means the feature does not closely match the base.</li>
+                    <li><strong>Exact Match:</strong> Both Overlap and Match are above 99%. The feature is almost identical to the base.</li>
+                    <li><strong>Partial Match:</strong> The feature overlaps the base area, but not completely.</li>
+                  </ul>
+                  <button id="close-comparison-info-modal" style="margin-top:18px; background:#1976d2; color:#fff; border:none; border-radius:4px; padding:8px 18px; cursor:pointer; font-size:1em;">Close</button>
+                </div>
+              </div>
+            `;
+
+            // Attach info button handler after rendering results
+            setTimeout(() => {
+              const infoBtn = document.getElementById('comparison-info-btn');
+              if (infoBtn) {
+                infoBtn.onclick = () => {
+                  if (!document.getElementById('comparison-info-modal')) {
+                    document.body.insertAdjacentHTML('beforeend', infoModalHtml);
+                    document.getElementById('close-comparison-info-modal').onclick = () => {
+                      const modal = document.getElementById('comparison-info-modal');
+                      if (modal) modal.remove();
+                    };
+                  }
+                };
+              }
+            }, 0);
+            overlappingFeatures.sort((a, b) => b.overlapPercent - a.overlapPercent);
+            overlappingFeatures.forEach((item, idx) => {
+              let matchType = 'partial-match';
+              let matchLabel = 'Partial Match';
+              if (item.overlapPercent > 99 && item.matchPercent > 99) {
+                matchType = 'exact-match';
+                matchLabel = '✓ Exact Match';
+              } else if (item.overlapPercent < 50) {
+                matchType = 'no-match';
+                matchLabel = 'Low Overlap';
+              }
+              const featureColor = featureColors[idx % featureColors.length];
+              const featureName = item.feature.properties[LAYER_OPTIONS[compareLayerIdx].searchField] || 'Unnamed';
+              html += renderComparisonResultEntry({
+                idx,
+                matchType,
+                matchLabel,
+                featureColor,
+                featureName,
+                overlapPercent: item.overlapPercent,
+                matchPercent: item.matchPercent
+              });
+            });
+            return html;
+          }
+
+          function drawComparisonOverlays(baseFeature, overlappingFeatures, compareLayerIdx) {
+            if (!comparisonMap) return;
+            try {
+              comparisonMapContainer.style.display = 'block';
+              comparisonOverlays = [];
+              window.comparisonFeatureOverlayMap = [];
+              // Draw base feature
+              const baseLayer = L.geoJSON(baseFeature, {
+                style: {
+                  fillColor: '#FF9800',
+                  fillOpacity: 0.25,
+                  color: '#000000',
+                  weight: 6
+                }
+              }).bindPopup('Base Feature').addTo(comparisonMap);
+              comparisonOverlays.push(baseLayer);
+              // Draw overlapping features
+              overlappingFeatures.forEach((item, idx) => {
+                const featureColor = featureColors[idx % featureColors.length];
+                const layerLabel = LAYER_OPTIONS[compareLayerIdx].label;
+                const props = item.feature.properties;
+                let popupHtml = getPopupProps(layerLabel, props);
+                popupHtml += `<br><span style='color:${featureColor};font-weight:600;'>Overlap: ${item.overlapPercent.toFixed(1)}%</span>`;
+                const featureLayer = L.geoJSON(item.feature, {
+                  style: {
+                    fillColor: featureColor,
+                    fillOpacity: 0.3,
+                    color: featureColor,
+                    weight: 2
+                  }
+                }).bindPopup(popupHtml).addTo(comparisonMap);
+                comparisonOverlays.push(featureLayer);
+                window.comparisonFeatureOverlayMap[idx] = featureLayer;
+                // Draw intersection (overlap) with hatched pattern
+                if (item.intersection) {
+                  const patternId = `hatch-${idx}-${Date.now()}`;
+                  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                  svg.setAttribute('width', '0');
+                  svg.setAttribute('height', '0');
+                  svg.style.position = 'absolute';
+                  svg.style.width = '0';
+                  svg.style.height = '0';
+                  svg.style.display = 'none';
+                  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+                  const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+                  pattern.setAttribute('id', patternId);
+                  pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+                  pattern.setAttribute('width', '8');
+                  pattern.setAttribute('height', '8');
+                  pattern.setAttribute('patternTransform', 'rotate(45)');
+                  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                  line.setAttribute('x1', '0');
+                  line.setAttribute('y1', '0');
+                  line.setAttribute('x2', '0');
+                  line.setAttribute('y2', '8');
+                  line.setAttribute('stroke', featureColor);
+                  line.setAttribute('stroke-width', '1.5');
+                  pattern.appendChild(line);
+                  defs.appendChild(pattern);
+                  svg.appendChild(defs);
+                  document.getElementById('svg-patterns').appendChild(svg);
+                  const overlapLayer = L.geoJSON(item.intersection, {
+                    style: {
+                      fillPattern: `url(#${patternId})`,
+                      fillColor: featureColor,
+                      fillOpacity: 0.4,
+                      color: featureColor,
+                      weight: 2.5
+                    },
+                    renderer: L.svg()
+                  }).bindPopup(`Overlap ${idx + 1}: ${item.overlapPercent.toFixed(1)}%`).addTo(comparisonMap);
+                  setTimeout(() => {
+                    const paths = overlapLayer._container?.querySelectorAll('path') || [];
+                    paths.forEach(path => {
+                      path.style.fill = `url(#${patternId})`;
+                    });
+                    // Remove SVG from DOM after pattern is applied
+                    if (svg.parentNode) svg.parentNode.removeChild(svg);
+                  }, 100);
+                  comparisonOverlays.push(overlapLayer);
+                }
+              });
+              // Zoom to base feature bounds
+              const baseLayerBounds = L.geoJSON(baseFeature);
+              comparisonMap.fitBounds(baseLayerBounds.getBounds(), { padding: [50, 50], maxZoom: 14 });
+              setTimeout(() => comparisonMap.invalidateSize(), 100);
+            } catch (e) {
+              console.warn('Error visualizing comparison:', e);
+            }
+          }
+
+          function attachComparisonResultHandlers() {
+            setTimeout(() => {
+              // Handle click on feature entries to highlight
+              const resultDivs = comparisonResults.querySelectorAll('.comparison-result[data-idx] > div[data-idx]');
+              resultDivs.forEach(div => {
+                div.addEventListener('click', function() {
+                  const idx = parseInt(this.getAttribute('data-idx'));
+                  highlightComparisonPolygon(idx);
+                });
+              });
+              
+              // Handle checkboxes to show/hide polygons
+              const checkboxes = comparisonResults.querySelectorAll('input[type="checkbox"][data-idx]');
+              checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function(e) {
+                  e.stopPropagation();
+                  const idx = parseInt(this.getAttribute('data-idx'));
+                  const layer = window.comparisonFeatureOverlayMap[idx];
+                  if (layer) {
+                    if (this.checked) {
+                      if (!comparisonMap.hasLayer(layer)) {
+                        comparisonMap.addLayer(layer);
+                      }
+                    } else {
+                      if (comparisonMap.hasLayer(layer)) {
+                        comparisonMap.removeLayer(layer);
+                      }
+                    }
+                  }
+                });
+              });
+            }, 0);
+          }
+
+          function highlightComparisonPolygon(idx) {
+            if (!window.comparisonFeatureOverlayMap || !window.comparisonFeatureOverlayMap[idx]) return;
+            resetComparisonPolygonStyles();
+            const selectedLayer = window.comparisonFeatureOverlayMap[idx];
+            if (selectedLayer && selectedLayer.setStyle) {
+              selectedLayer.setStyle({
+                color: '#ffeb3b',
+                fillColor: '#ffeb3b',
+                weight: 5,
+                fillOpacity: 0.5
+              });
+              if (selectedLayer.openPopup) selectedLayer.openPopup();
+              if (selectedLayer.bringToFront) selectedLayer.bringToFront();
+            }
+          }
+
+          function resetComparisonPolygonStyles() {
+            if (!window.comparisonFeatureOverlayMap) return;
+            window.comparisonFeatureOverlayMap.forEach((layer, i) => {
+              if (layer && layer.setStyle) {
+                const featureColor = featureColors[i % featureColors.length];
+                layer.setStyle({
+                  color: featureColor,
+                  fillColor: featureColor,
+                  weight: 2,
+                  fillOpacity: 0.3
+                });
+              }
+            });
+          }
       
       comparisonResults.innerHTML = resultsHtml;
     }
 
-    // Visualize comparison on modal map
-    function visualizeAllComparisons(baseFeature, overlappingFeatures, color) {
-      if (!comparisonMap) return;
-      
-      try {
-        // Show map container
-        comparisonMapContainer.style.display = 'block';
-        
-        // Color palette for overlapping features
-        const featureColors = [
-          '#2196F3', // Blue
-          '#9C27B0', // Purple
-          '#E91E63', // Pink
-          '#00BCD4', // Cyan
-          '#FF5722', // Deep Orange
-          '#009688', // Teal
-          '#FFC107', // Amber
-          '#795548', // Brown
-          '#607D8B', // Blue Grey
-          '#3F51B5'  // Indigo
-        ];
-        
-        // Draw base feature with black border for easy identification
-        const baseLayer = L.geoJSON(baseFeature, {
-          style: {
-            fillColor: '#FF9800',
-            fillOpacity: 0.25,
-            color: '#000000',
-            weight: 6
-          }
-        }).bindPopup('Base Feature').addTo(comparisonMap);
-        comparisonOverlays.push(baseLayer);
-        
-        // Draw all overlapping features from compare layer with different colors
-               overlappingFeatures.forEach((item, idx) => {
-          const featureColor = featureColors[idx % featureColors.length];
-          const compareLayerIdx = parseInt(comparisonCompareLayer.value);
-          const layerLabel = LAYER_OPTIONS[compareLayerIdx].label;
-          const props = item.feature.properties;
-          let popupHtml = getPopupProps(layerLabel, props);
-          // Add overlap info
-          popupHtml += `<br><span style='color:${featureColor};font-weight:600;'>Overlap: ${item.overlapPercent.toFixed(1)}%</span>`;
-          const featureLayer = L.geoJSON(item.feature, {
-            style: {
-              fillColor: featureColor,
-              fillOpacity: 0.3,
-              color: featureColor,
-              weight: 2
-            }
-          }).bindPopup(popupHtml).addTo(comparisonMap);
-          comparisonOverlays.push(featureLayer);
-          
-          // Draw intersection (overlap) with hatched pattern
-          if (item.intersection) {
-            // Create unique pattern ID for this overlap
-            const patternId = `hatch-${idx}-${Date.now()}`;
-            
-            // Create SVG pattern element
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.style.position = 'absolute';
-            svg.style.width = '0';
-            svg.style.height = '0';
-            
-            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-            const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
-            pattern.setAttribute('id', patternId);
-            pattern.setAttribute('patternUnits', 'userSpaceOnUse');
-            pattern.setAttribute('width', '8');
-            pattern.setAttribute('height', '8');
-            pattern.setAttribute('patternTransform', 'rotate(45)');
-            
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', '0');
-            line.setAttribute('y1', '0');
-            line.setAttribute('x2', '0');
-            line.setAttribute('y2', '8');
-            line.setAttribute('stroke', featureColor);
-            line.setAttribute('stroke-width', '1.5');
-            
-            pattern.appendChild(line);
-            defs.appendChild(pattern);
-            svg.appendChild(defs);
-            document.body.appendChild(svg);
-            
-            const overlapLayer = L.geoJSON(item.intersection, {
-              style: {
-                fillPattern: `url(#${patternId})`,
-                fillColor: featureColor,
-                fillOpacity: 0.4,
-                color: featureColor,
-                weight: 2.5
-              },
-              renderer: L.svg()
-            }).bindPopup(`Overlap ${idx + 1}: ${item.overlapPercent.toFixed(1)}%`).addTo(comparisonMap);
-            
-            // Apply pattern using direct SVG manipulation
-            setTimeout(() => {
-              const paths = overlapLayer._container?.querySelectorAll('path') || [];
-              paths.forEach(path => {
-                path.style.fill = `url(#${patternId})`;
-              });
-            }, 100);
-            
-            comparisonOverlays.push(overlapLayer);
-          }
-        });
-        
-        // Zoom to base feature bounds
-        const baseLayerBounds = L.geoJSON(baseFeature);
-        comparisonMap.fitBounds(baseLayerBounds.getBounds(), { padding: [50, 50], maxZoom: 14 });
-        
-        // Invalidate size to fix display issues
-        setTimeout(() => comparisonMap.invalidateSize(), 100);
-      } catch (e) {
-        console.warn('Error visualizing comparison:', e);
-      }
-    }
 
     // Add spinner animation
     const style = document.createElement('style');
@@ -1678,4 +1847,11 @@
     document.head.appendChild(style);
   </script>
 </body>
+      <!-- Add Leaflet.easyPrint for map export -->
+      <script src="https://unpkg.com/leaflet-easyprint@2.1.9/dist/bundle.min.js"></script>
+    <!-- Add leaflet-image for map export -->
+    <script src="https://unpkg.com/leaflet-image/leaflet-image.js"></script>
+  <!-- Add required libraries for export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </html>
